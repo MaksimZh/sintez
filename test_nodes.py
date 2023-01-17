@@ -3,7 +3,7 @@ import unittest
 from nodes import ValueNode, ProcNode
 
 
-class Test_Value(unittest.TestCase):
+class Test_ValueNode(unittest.TestCase):
 
     def test_build(self):
         v1 = ValueNode(int)
@@ -173,6 +173,8 @@ class Test_Value(unittest.TestCase):
         v1.put(1)
         self.assertEqual(v1.get(), 1)
         self.assertEqual(v1.get_get_status(), ValueNode.GetStatus.OK)
+
+
 
 
 if __name__ == "__main__":
