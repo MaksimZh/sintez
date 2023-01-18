@@ -300,7 +300,7 @@ class ProcIO:
     @abstractmethod
     def get_nodes(self) -> dict[str, ValueNode]:
         return dict()
-    
+
     # check if name is in collection
     @abstractmethod
     def has_name(self, name: str) -> bool:
@@ -323,7 +323,7 @@ class ProcIO:
 
 
 class ProcInput(ProcIO):
-    
+
     # get value of node
     # PRE: building complete
     # PRE: node is in the collection
@@ -343,9 +343,9 @@ class ProcInput(ProcIO):
 
 
 class ProcOutput(ProcIO):
-    
+
     # COMMANDS
-    
+
     # get type of node
     # PRE: node is in the collection
     @abstractmethod
@@ -376,9 +376,9 @@ class ProcNodeIO(ProcIO):
         self.__add_status = self.AddStatus.NIL
         self.__get_type_status = self.GetTypeStatus.NIL
 
-    
+
     # COMMANDS
-    
+
     # add node
     # PRE: building not complete
     # PRE: node not in collection
@@ -396,7 +396,7 @@ class ProcNodeIO(ProcIO):
             return
         self._nodes[name] = node
         self.__add_status = self.AddStatus.OK
-    
+
     class AddStatus(Enum):
         NIL = auto(),
         OK = auto(),
@@ -483,7 +483,7 @@ class ProcNodeOutput(ProcNodeIO, ProcOutput):
 
 
     # COMMANDS
-    
+
     # get type of node
     # PRE: node is in the collection
     def put(self, name: str, value: Any) -> None:
@@ -508,7 +508,7 @@ class ProcNodeOutput(ProcNodeIO, ProcOutput):
     def get_put_status(self) -> ProcOutput.PutStatus:
         return self.__put_status
 
-    
+
     # reset node-put-value status
     def reset_output_check(self) -> None:
         if not self._build_complete:
@@ -602,7 +602,7 @@ class ProcNode:
     def get_add_input_status(self) -> AddInputStatus:
         return self.__add_input_status
 
-    
+
     # add output node
     # PRE: building not complete
     # PRE: node not linked to this
@@ -619,7 +619,7 @@ class ProcNode:
             return
         self.__outputs.add(name, output)
         self.__add_output_status = self.AddOutputStatus.OK
-    
+
     class AddOutputStatus(Enum):
         NIL = auto(),
         OK = auto(),
@@ -658,7 +658,7 @@ class ProcNode:
         NIL = auto(),
         OK = auto(),
         BUILD_INCOMPLETE = auto(),
-        
+
 
     __invalidate_status: InvalidateStatus
 
@@ -673,7 +673,9 @@ class ProcNode:
             return
         for input in self.__inputs.get_nodes().values():
             input.validate()
-            assert(input.get_validate_status() == ValueNode.ValidateStatus.OK)
+            if input.get_validate_status() != ValueNode.ValidateStatus.OK:
+                self.__run_status = self.RunStatus.INPUT_VALIDATION_FAILED
+                return
         self.__outputs.reset_output_check()
         self.__proc.run()
         if not self.__outputs.is_output_complete():
@@ -688,6 +690,7 @@ class ProcNode:
         NIL = auto(),
         OK = auto(),
         BUILD_INCOMPLETE = auto(),
+        INPUT_VALIDATION_FAILED = auto(),
         INCOMPLETE_OUTPUT = auto(),
 
     __run_status: RunStatus
@@ -716,9 +719,17 @@ class Simulator:
     __values: dict[str, ValueNode]
     __procs: list[ProcNode]
 
+    # CONSTRUCTOR
+    # PRE: patterns have no duplicate names
+    # PRE: all procedure IO names present in value patterns
+    # PRE: no duplicate links
+    # PRE: no multiple value inputs
+    # POST: nodes linked and build complete for all nodes
     def __init__(self, node_patterns: list[NodePattern]) -> None:
         self.__init_status = self.InitStatus.NIL
         self.__init_message = ""
+        self.__put_status = self.PutStatus.NIL
+        self.__get_status = self.GetStatus.NIL
         value_patterns = []
         proc_patterns = []
         for pattern in node_patterns:
@@ -745,6 +756,8 @@ class Simulator:
         OK = auto(),
         DUPLICATE_NAME = auto(),
         NAME_NOT_FOUND = auto(),
+        ALREADY_LINKED = auto(),
+        TOO_MANY_INPUTS = auto(),
 
     __init_status: InitStatus
     __init_message: str
@@ -755,7 +768,7 @@ class Simulator:
     def get_init_message(self) -> str:
         return self.__init_message
 
-    
+
     def __init_values(self, patterns: list[ValueNodePattern]) -> None:
         self.__values = dict()
         for name, value_type in patterns:
@@ -787,7 +800,19 @@ class Simulator:
                 return
             value = self.__values[value_name]
             value.add_output(proc)
+            if value.get_add_output_status() \
+                    == ValueNode.AddOutputStatus.ALREADY_LINKED:
+                self.__init_status = self.InitStatus.ALREADY_LINKED
+                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+                return
+            assert(value.get_add_output_status() == ValueNode.AddOutputStatus.OK)
             proc.add_input(socket_name, value)
+            if proc.get_add_input_status() \
+                    == ProcNode.AddInputStatus.ALREADY_LINKED:
+                self.__init_status = self.InitStatus.ALREADY_LINKED
+                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+                return
+            assert(proc.get_add_input_status() == ProcNode.AddInputStatus.OK)
 
 
     def __add_outputs(self, proc: ProcNode, outputs: dict[str, str]) -> None:
@@ -798,4 +823,88 @@ class Simulator:
                 return
             value = self.__values[value_name]
             proc.add_output(socket_name, value)
+            if proc.get_add_output_status() \
+                    == ProcNode.AddOutputStatus.ALREADY_LINKED:
+                self.__init_status = self.InitStatus.ALREADY_LINKED
+                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+                return
+            assert(proc.get_add_output_status() == ProcNode.AddOutputStatus.OK)
             value.add_input(proc)
+            if value.get_add_input_status() \
+                    == ValueNode.AddInputStatus.ALREADY_LINKED:
+                self.__init_status = self.InitStatus.ALREADY_LINKED
+                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+                return
+            if value.get_add_input_status() \
+                    == ValueNode.AddInputStatus.TOO_MANY_INPUTS:
+                self.__init_status = self.InitStatus.TOO_MANY_INPUTS
+                self.__init_message = f"Too many inputs: '{socket_name}': '{value_name}'"
+                return
+            assert(value.get_add_input_status() == ValueNode.AddInputStatus.OK)
+
+
+    # COMMANDS
+
+    # PRE: init succeeded
+    # PRE: value of proper type
+    # POST: value is put
+    def put(self, name: str, value: Any) -> None:
+        if self.get_init_status() != self.InitStatus.OK:
+            self.__put_status = self.PutStatus.NOT_INITIALIZED
+            return
+        if name not in self.__values:
+            self.__put_status = self.PutStatus.NOT_FOUND
+            return
+        if self.__values[name].get_input() is not None:
+            self.__put_status = self.PutStatus.NOT_INPUT_NODE
+            return
+        self.__values[name].put(value)
+        assert(self.__values[name].get_put_status() == ValueNode.PutStatus.OK)
+        self.__put_status = self.PutStatus.OK
+
+    class PutStatus(Enum):
+        NIL = auto(),
+        OK = auto(),
+        NOT_INITIALIZED = auto(),
+        NOT_FOUND = auto(),
+        NOT_INPUT_NODE = auto(),
+
+    __put_status: PutStatus
+
+    def get_put_status(self) -> PutStatus:
+        return self.__put_status
+
+
+    # QUERIES
+
+    # PRE: init succeeded
+    # PRE: value with name exists
+    # POST: value is valid
+    def get(self, name: str) -> Any:
+        if self.get_init_status() != self.InitStatus.OK:
+            self.__get_status = self.GetStatus.NOT_INITIALIZED
+            return
+        if name not in self.__values:
+            self.__get_status = self.GetStatus.NOT_FOUND
+            return
+        node = self.__values[name]
+        node.validate()
+        if node.get_validate_status() != ValueNode.ValidateStatus.OK:
+            self.__get_status = self.GetStatus.VALIDATION_FAILED
+            return None
+        value = node.get()
+        assert(node.get_get_status() == ValueNode.GetStatus.OK)
+        self.__get_status = self.GetStatus.OK
+        return value
+
+    class GetStatus(Enum):
+        NIL = auto(),
+        OK = auto(),
+        NOT_INITIALIZED = auto(),
+        NOT_FOUND = auto(),
+        VALIDATION_FAILED = auto(),
+
+    __get_status: GetStatus
+
+    def get_get_status(self) -> GetStatus:
+        return self.__get_status

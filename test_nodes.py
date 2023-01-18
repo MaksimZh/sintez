@@ -159,7 +159,7 @@ class Test_ValueNode(unittest.TestCase):
         self.assertEqual(v.get_state(), ValueNode.State.INVALID)
         self.assertEqual(p.get_invalidate_status(), ProcNode.InvalidateStatus.OK)
 
-    
+
     def test_used(self):
         v = ValueNode(int)
         p1 = ProcNode(FailProc)
@@ -218,7 +218,7 @@ class Test_ValueNode(unittest.TestCase):
         self.assertEqual(v.get_validate_status(), ValueNode.ValidateStatus.INPUT_FAILED)
         self.assertEqual(p.get_run_status(), ProcNode.RunStatus.INCOMPLETE_OUTPUT)
 
-    
+
     def test_validate_mid_success(self):
         v = ValueNode(int)
         p = ProcNode(SuccessProc)
@@ -231,14 +231,14 @@ class Test_ValueNode(unittest.TestCase):
         self.assertEqual(v.get_validate_status(), ValueNode.ValidateStatus.OK)
         self.assertEqual(p.get_run_status(), ProcNode.RunStatus.OK)
 
-    
+
     def test_get_type(self):
         v1 = ValueNode(int)
         v2 = ValueNode(str)
         self.assertIs(v1.get_type(), int)
         self.assertIs(v2.get_type(), str)
 
-    
+
     def test_get(self):
         v = ValueNode(int)
         self.assertEqual(v.get_get_status(), ValueNode.GetStatus.NIL)
@@ -276,7 +276,7 @@ class Test_ProcNodeIO(unittest.TestCase):
         self.assertEqual(o.get_add_status(), self.T.AddStatus.BUILD_COMPLETE)
         self.assertEqual(o.get_nodes(), {"a": v1, "b": v2})
 
-    
+
     def test_has(self):
         o = self.T()
         v1 = ValueNode(int)
@@ -291,7 +291,7 @@ class Test_ProcNodeIO(unittest.TestCase):
         self.assertTrue(o.has_node(v2))
         self.assertFalse(o.has_node(v3))
 
-    
+
     def test_get_type(self):
         o = self.T()
         v1 = ValueNode(int)
@@ -360,7 +360,7 @@ class Test_ProcNodeOutput(Test_ProcNodeIO):
         self.assertEqual(v.get_state(), ValueNode.State.REGULAR)
         self.assertEqual(v.get(), 1)
 
-    
+
     def test_output_check(self):
         o = ProcNodeOutput()
         v1 = ValueNode(int)
@@ -439,7 +439,7 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(p.get_inputs(), {"a": v1, "b": v2})
         self.assertEqual(p.get_outputs(), {"c": v3, "d": v4})
 
-    
+
     def test_invalidate(self):
         p = ProcNode(FailProc)
         v1 = ValueNode(int)
@@ -465,7 +465,7 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v1.get_invalidate_status(), ValueNode.InvalidateStatus.OK)
         self.assertEqual(v2.get_invalidate_status(), ValueNode.InvalidateStatus.OK)
 
-    
+
     def test_run_empty(self):
         p = ProcNode(FailProc)
         v1 = ValueNode(int)
@@ -494,6 +494,8 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v1.get_used_by_status(), ValueNode.UsedByStatus.NIL)
         self.assertEqual(v2.get_used_by_status(), ValueNode.UsedByStatus.NIL)
         p.complete_build()
+        p.run()
+        self.assertEqual(p.get_run_status(), ProcNode.RunStatus.INPUT_VALIDATION_FAILED)
         v1.put(1)
         v2.put(2)
         self.assertEqual(v3.get_put_status(), ValueNode.PutStatus.NIL)
@@ -507,7 +509,7 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v3.get_put_status(), ValueNode.PutStatus.NIL)
         self.assertEqual(v4.get_put_status(), ValueNode.PutStatus.NIL)
 
-    
+
     def test_run(self):
         p = ProcNode(SuccessProc)
         v1 = ValueNode(int)
@@ -616,14 +618,14 @@ class Test_Simulator(unittest.TestCase):
         ])
         self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
         self.assertEqual(s.get_init_message(), "")
-        
+
         s = Simulator([
             ("a", int),
             ("b", int),
             ("c", int),
             ("d", int),
             (DivmodProc,
-                {"left": "a", "right": "a"},
+                {"left": "a", "right": "b"},
                 {"quotient": "c", "remainder": "d"}),
         ])
         self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
@@ -633,7 +635,7 @@ class Test_Simulator(unittest.TestCase):
             ("a", int),
             ("b", int),
             (DivmodProc,
-                {"left": "a", "right": "a"},
+                {"left": "a", "right": "b"},
                 {"quotient": "c", "remainder": "d"}),
             ("c", int),
             ("d", int),
@@ -653,7 +655,7 @@ class Test_Simulator(unittest.TestCase):
         ])
         self.assertEqual(s.get_init_status(), Simulator.InitStatus.DUPLICATE_NAME)
         self.assertEqual(s.get_init_message(), "Duplicate name: 'a'")
-        
+
         s = Simulator([
             ("a", int),
             (SuccessProc,
@@ -671,6 +673,109 @@ class Test_Simulator(unittest.TestCase):
         ])
         self.assertEqual(s.get_init_status(), Simulator.InitStatus.NAME_NOT_FOUND)
         self.assertEqual(s.get_init_message(), "Output not found: 'left': 'c'")
+
+        s = Simulator([
+            ("a", int),
+            (SuccessProc,
+                {"foo": "a", "boo": "a"},
+                {}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.ALREADY_LINKED)
+        self.assertEqual(s.get_init_message(), "Already linked: 'boo': 'a'")
+
+        s = Simulator([
+            ("a", int),
+            (SuccessProc,
+                {"foo": "a"},
+                {"boo": "a"}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.ALREADY_LINKED)
+        self.assertEqual(s.get_init_message(), "Already linked: 'boo': 'a'")
+
+        s = Simulator([
+            ("a", int),
+            (SuccessProc,
+                {},
+                {"foo": "a", "boo": "a"}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.ALREADY_LINKED)
+        self.assertEqual(s.get_init_message(), "Already linked: 'boo': 'a'")
+
+        s = Simulator([
+            ("a", int),
+            (SuccessProc, {}, {"foo": "a"}),
+            (SuccessProc, {}, {"foo": "a"}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.TOO_MANY_INPUTS)
+        self.assertEqual(s.get_init_message(), "Too many inputs: 'foo': 'a'")
+
+
+
+    def test_put(self):
+        s = Simulator([("a", int), ("a", int)])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.DUPLICATE_NAME)
+        self.assertEqual(s.get_put_status(), Simulator.PutStatus.NIL)
+        s.put("a", 1)
+        self.assertEqual(s.get_put_status(), Simulator.PutStatus.NOT_INITIALIZED)
+
+        s = Simulator([
+            ("a", int),
+            ("b", int),
+            (DivmodProc,
+                {"left": "a", "right": "b"},
+                {"quotient": "c", "remainder": "d"}),
+            ("c", int),
+            ("d", int),
+            (DivmodProc,
+                {"left": "c", "right": "d"},
+                {"quotient": "e", "remainder": "f"}),
+            ("e", int),
+            ("f", int),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_put_status(), Simulator.PutStatus.NIL)
+        s.put("a", 1)
+        self.assertEqual(s.get_put_status(), Simulator.PutStatus.OK)
+        s.put("foo", 1)
+        self.assertEqual(s.get_put_status(), Simulator.PutStatus.NOT_FOUND)
+        s.put("c", 1)
+        self.assertEqual(s.get_put_status(), Simulator.PutStatus.NOT_INPUT_NODE)
+
+
+    def test_get(self):
+        s = Simulator([("a", int), ("a", int)])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.DUPLICATE_NAME)
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.NIL)
+        s.get("a")
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.NOT_INITIALIZED)
+
+        s = Simulator([
+            ("a", int),
+            ("b", int),
+            (DivmodProc,
+                {"left": "a", "right": "b"},
+                {"quotient": "c", "remainder": "d"}),
+            ("c", int),
+            ("d", int),
+            (DivmodProc,
+                {"left": "c", "right": "d"},
+                {"quotient": "e", "remainder": "f"}),
+            ("e", int),
+            ("f", int),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.NIL)
+        s.get("foo")
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.NOT_FOUND)
+        s.get("e")
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.VALIDATION_FAILED)
+        s.put("a", 101)
+        s.put("b", 7)
+        self.assertEqual(s.get("e"), 4)
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
+        self.assertEqual(s.get("c"), 14)
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
+
 
 if __name__ == "__main__":
     del Test_ProcNodeIO
