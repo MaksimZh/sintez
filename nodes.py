@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from enum import Enum, auto
 from abc import abstractmethod
 
@@ -637,6 +637,7 @@ class ProcNode:
     # POST: procedure initialized
     # POST: build complete
     def complete_build(self) -> None:
+        self.__inputs.complete_build()
         self.__outputs.complete_build()
         self.__proc = self.__proc_type(self.__inputs, self.__outputs)
         self.__build_complete = True
@@ -704,3 +705,97 @@ class ProcNode:
     # get dictionary of output nodes
     def get_outputs(self) -> dict[str, "ValueNode"]:
         return self.__outputs.get_nodes()
+
+
+ValueNodePattern = tuple[str, type]
+ProcNodePattern = tuple[type, dict[str, str], dict[str, str]]
+NodePattern = Union[ValueNodePattern, ProcNodePattern]
+
+class Simulator:
+
+    __values: dict[str, ValueNode]
+    __procs: list[ProcNode]
+
+    def __init__(self, node_patterns: list[NodePattern]) -> None:
+        self.__init_status = self.InitStatus.NIL
+        self.__init_message = ""
+        value_patterns = []
+        proc_patterns = []
+        for pattern in node_patterns:
+            match pattern:
+                case (_, _):
+                    value_patterns.append(pattern)
+                case (_, _, _):
+                    proc_patterns.append(pattern)
+
+        self.__init_values(value_patterns)
+        if self.__init_status != self.InitStatus.NIL:
+            return
+        self.__init_procs(proc_patterns)
+        if self.__init_status != self.InitStatus.NIL:
+            return
+        for value in self.__values.values():
+            value.complete_build()
+        for proc in self.__procs:
+            proc.complete_build()
+        self.__init_status = self.InitStatus.OK
+
+    class InitStatus(Enum):
+        NIL = auto(),
+        OK = auto(),
+        DUPLICATE_NAME = auto(),
+        NAME_NOT_FOUND = auto(),
+
+    __init_status: InitStatus
+    __init_message: str
+
+    def get_init_status(self) -> InitStatus:
+        return self.__init_status
+
+    def get_init_message(self) -> str:
+        return self.__init_message
+
+    
+    def __init_values(self, patterns: list[ValueNodePattern]) -> None:
+        self.__values = dict()
+        for name, value_type in patterns:
+            if name in self.__values:
+                self.__init_status = self.InitStatus.DUPLICATE_NAME
+                self.__init_message = f"Duplicate name: '{name}'"
+                return
+            self.__values[name] = ValueNode(value_type)
+
+
+    def __init_procs(self, patterns: list[ProcNodePattern]) -> None:
+        self.__procs = list()
+        for proc_type, inputs, outputs in patterns:
+            proc = ProcNode(proc_type)
+            self.__add_inputs(proc, inputs)
+            if self.__init_status != self.InitStatus.NIL:
+                return
+            self.__add_outputs(proc, outputs)
+            if self.__init_status != self.InitStatus.NIL:
+                return
+            self.__procs.append(proc)
+
+
+    def __add_inputs(self, proc: ProcNode, inputs: dict[str, str]) -> None:
+        for socket_name, value_name in inputs.items():
+            if value_name not in self.__values:
+                self.__init_status = self.InitStatus.NAME_NOT_FOUND
+                self.__init_message = f"Input not found: '{socket_name}': '{value_name}'"
+                return
+            value = self.__values[value_name]
+            value.add_output(proc)
+            proc.add_input(socket_name, value)
+
+
+    def __add_outputs(self, proc: ProcNode, outputs: dict[str, str]) -> None:
+        for socket_name, value_name in outputs.items():
+            if value_name not in self.__values:
+                self.__init_status = self.InitStatus.NAME_NOT_FOUND
+                self.__init_message = f"Output not found: '{socket_name}': '{value_name}'"
+                return
+            value = self.__values[value_name]
+            proc.add_output(socket_name, value)
+            value.add_input(proc)

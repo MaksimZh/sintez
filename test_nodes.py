@@ -2,7 +2,8 @@ import unittest
 from typing import Type
 
 from nodes import ValueNode, ProcNode, \
-    ProcInput, ProcOutput, ProcNodeIO, ProcNodeInput, ProcNodeOutput
+    ProcInput, ProcOutput, ProcNodeIO, ProcNodeInput, ProcNodeOutput, \
+    Simulator
 
 
 class FailProc:
@@ -28,6 +29,27 @@ class SuccessProc:
             self.__input.get(name)
         for name in self.__output.get_nodes().keys():
             self.__output.put(name, self.__output.get_type(name)())
+
+
+class DivmodProc:
+
+    __input: ProcInput
+    __output: ProcOutput
+
+    def __init__(self, input: ProcInput, output: ProcOutput) -> None:
+        self.__input = input
+        self.__output = output
+
+    def run(self) -> None:
+        a = self.__input.get("left")
+        assert(self.__input.get_get_status() == ProcInput.GetStatus.OK)
+        b = self.__input.get("right")
+        assert(self.__input.get_get_status() == ProcInput.GetStatus.OK)
+        q, r = divmod(a, b)
+        self.__output.put("quotient", q)
+        assert(self.__output.get_put_status() == ProcOutput.PutStatus.OK)
+        self.__output.put("remainder", r)
+        assert(self.__output.get_put_status() == ProcOutput.PutStatus.OK)
 
 
 class Test_ValueNode(unittest.TestCase):
@@ -516,6 +538,139 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v3.get_put_status(), ValueNode.PutStatus.OK)
         self.assertEqual(v4.get_put_status(), ValueNode.PutStatus.OK)
 
+
+class Test_Nodes(unittest.TestCase):
+
+    def test_single(self):
+        a = ValueNode(int)
+        b = ValueNode(int)
+        q = ValueNode(int)
+        r = ValueNode(int)
+        dm = ProcNode(DivmodProc)
+        a.add_output(dm)
+        a.complete_build()
+        b.add_output(dm)
+        b.complete_build()
+        dm.add_input("left", a)
+        dm.add_input("right", b)
+        dm.add_output("quotient", q)
+        dm.add_output("remainder", r)
+        dm.complete_build()
+        q.add_input(dm)
+        q.complete_build()
+        r.add_input(dm)
+        r.complete_build()
+        a.put(20)
+        b.put(7)
+        q.validate()
+        r.validate()
+        self.assertEqual(q.get(), 2)
+        self.assertEqual(r.get(), 6)
+
+    def test_chain(self):
+        a = ValueNode(int)
+        b = ValueNode(int)
+        c = ValueNode(int)
+        d = ValueNode(int)
+        e = ValueNode(int)
+        f = ValueNode(int)
+        p1 = ProcNode(DivmodProc)
+        p2 = ProcNode(DivmodProc)
+        a.add_output(p1)
+        a.complete_build()
+        b.add_output(p1)
+        b.complete_build()
+        p1.add_input("left", a)
+        p1.add_input("right", b)
+        p1.add_output("quotient", c)
+        p1.add_output("remainder", d)
+        p1.complete_build()
+        c.add_input(p1)
+        c.add_output(p2)
+        c.complete_build()
+        d.add_input(p1)
+        d.add_output(p2)
+        d.complete_build()
+        p2.add_input("left", c)
+        p2.add_input("right", d)
+        p2.add_output("quotient", e)
+        p2.add_output("remainder", f)
+        p2.complete_build()
+        e.add_input(p2)
+        e.complete_build()
+        f.add_input(p2)
+        f.complete_build()
+        a.put(101)
+        b.put(7)
+        e.validate()
+        f.validate()
+        self.assertEqual(e.get(), 4)
+        self.assertEqual(f.get(), 2)
+
+
+class Test_Simulator(unittest.TestCase):
+
+    def test_init(self):
+        s = Simulator([
+            ("a", int),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_init_message(), "")
+        
+        s = Simulator([
+            ("a", int),
+            ("b", int),
+            ("c", int),
+            ("d", int),
+            (DivmodProc,
+                {"left": "a", "right": "a"},
+                {"quotient": "c", "remainder": "d"}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_init_message(), "")
+
+        s = Simulator([
+            ("a", int),
+            ("b", int),
+            (DivmodProc,
+                {"left": "a", "right": "a"},
+                {"quotient": "c", "remainder": "d"}),
+            ("c", int),
+            ("d", int),
+            (DivmodProc,
+                {"left": "c", "right": "d"},
+                {"quotient": "e", "remainder": "f"}),
+            ("e", int),
+            ("f", int),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_init_message(), "")
+
+        s = Simulator([
+            ("a", int),
+            ("b", int),
+            ("a", str),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.DUPLICATE_NAME)
+        self.assertEqual(s.get_init_message(), "Duplicate name: 'a'")
+        
+        s = Simulator([
+            ("a", int),
+            (SuccessProc,
+                {"left": "c"},
+                {}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.NAME_NOT_FOUND)
+        self.assertEqual(s.get_init_message(), "Input not found: 'left': 'c'")
+
+        s = Simulator([
+            ("a", int),
+            (SuccessProc,
+                {},
+                {"left": "c"}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.NAME_NOT_FOUND)
+        self.assertEqual(s.get_init_message(), "Output not found: 'left': 'c'")
 
 if __name__ == "__main__":
     del Test_ProcNodeIO
