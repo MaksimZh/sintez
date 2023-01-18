@@ -524,14 +524,16 @@ class ProcedureNode:
             or name in self.__outputs
 
 
-ValueNodePattern = tuple[str, type]
-ProcNodePattern = tuple[Procedure, dict[str, str], dict[str, str]]
-NodePattern = Union[ValueNodePattern, ProcNodePattern]
+ValueLink = Union[str, type]
+ValuePattern = tuple[str, type]
+ProcPattern = tuple[Procedure, dict[str, ValueLink], dict[str, ValueLink]]
+NodePattern = Union[ValuePattern, ProcPattern]
 
 class Simulator(Procedure):
 
     __values: dict[str, ValueNode]
     __procs: list[ProcedureNode]
+    __auto_value_types: dict[str, type]
 
     # CONSTRUCTOR
     # PRE: patterns have no duplicate names
@@ -543,8 +545,6 @@ class Simulator(Procedure):
         super().__init__()
         self.__init_status = self.InitStatus.NIL
         self.__init_message = ""
-        self.__put_status = self.PutStatus.NIL
-        self.__get_status = self.GetStatus.NIL
         value_patterns = []
         proc_patterns = []
         for pattern in node_patterns:
@@ -573,6 +573,7 @@ class Simulator(Procedure):
         NAME_NOT_FOUND = auto(),
         ALREADY_LINKED = auto(),
         TOO_MANY_INPUTS = auto(),
+        AUTO_VALUE_TYPE_MISMATCH = auto(),
 
     __init_status: InitStatus
     __init_message: str
@@ -584,7 +585,7 @@ class Simulator(Procedure):
         return self.__init_message
 
 
-    def __init_values(self, patterns: list[ValueNodePattern]) -> None:
+    def __init_values(self, patterns: list[ValuePattern]) -> None:
         self.__values = dict()
         for name, value_type in patterns:
             if name in self.__values:
@@ -594,8 +595,9 @@ class Simulator(Procedure):
             self.__values[name] = ValueNode(value_type)
 
 
-    def __init_procs(self, patterns: list[ProcNodePattern]) -> None:
+    def __init_procs(self, patterns: list[ProcPattern]) -> None:
         self.__procs = list()
+        self.__auto_value_types = dict()
         for proc_type, inputs, outputs in patterns:
             proc = ProcedureNode(proc_type)
             self.__add_inputs(proc, inputs)
@@ -607,55 +609,93 @@ class Simulator(Procedure):
             self.__procs.append(proc)
 
 
-    def __add_inputs(self, proc: ProcedureNode, inputs: dict[str, str]) -> None:
-        for socket_name, value_name in inputs.items():
+    def __add_inputs(self, proc: ProcedureNode, inputs: dict[str, ValueLink]) -> None:
+        for slot_name, value_link in inputs.items():
+            if type(value_link) is type:
+                value_name = slot_name
+                self.__add_auto_value(value_name, value_link)
+                if self.__init_status != self.InitStatus.NIL:
+                    return
+            else:
+                assert(type(value_link) is str)
+                value_name: str = value_link
             if value_name not in self.__values:
                 self.__init_status = self.InitStatus.NAME_NOT_FOUND
-                self.__init_message = f"Input not found: '{socket_name}': '{value_name}'"
+                self.__init_message = f"Input not found: '{slot_name}': '{value_name}'"
                 return
             value = self.__values[value_name]
-            value.add_output(proc)
-            if value.get_add_output_status() \
-                    == ValueNode.AddOutputStatus.ALREADY_LINKED:
-                self.__init_status = self.InitStatus.ALREADY_LINKED
-                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+            self.__add_input(proc, slot_name, value)
+            if self.__init_status == self.InitStatus.ALREADY_LINKED:
+                self.__init_message = f"Already linked: '{slot_name}': '{value_name}'"
                 return
-            assert(value.get_add_output_status() == ValueNode.AddOutputStatus.OK)
-            proc.add_input(socket_name, value)
-            if proc.get_add_input_status() \
-                    == ProcedureNode.AddInputStatus.ALREADY_LINKED:
-                self.__init_status = self.InitStatus.ALREADY_LINKED
-                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
-                return
-            assert(proc.get_add_input_status() == ProcedureNode.AddInputStatus.OK)
 
-
-    def __add_outputs(self, proc: ProcedureNode, outputs: dict[str, str]) -> None:
-        for socket_name, value_name in outputs.items():
+    def __add_outputs(self, proc: ProcedureNode, outputs: dict[str, ValueLink]) -> None:
+        for slot_name, value_link in outputs.items():
+            if type(value_link) is type:
+                value_name = slot_name
+                self.__add_auto_value(value_name, value_link)
+                if self.__init_status != self.InitStatus.NIL:
+                    return
+            else:
+                assert(type(value_link) is str)
+                value_name: str = value_link
             if value_name not in self.__values:
                 self.__init_status = self.InitStatus.NAME_NOT_FOUND
-                self.__init_message = f"Output not found: '{socket_name}': '{value_name}'"
+                self.__init_message = f"Output not found: '{slot_name}': '{value_name}'"
                 return
             value = self.__values[value_name]
-            proc.add_output(socket_name, value)
-            if proc.get_add_output_status() \
-                    == ProcedureNode.AddOutputStatus.ALREADY_LINKED:
-                self.__init_status = self.InitStatus.ALREADY_LINKED
-                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+            self.__add_output(proc, slot_name, value)
+            if self.__init_status == self.InitStatus.ALREADY_LINKED:
+                self.__init_message = f"Already linked: '{slot_name}': '{value_name}'"
                 return
-            assert(proc.get_add_output_status() == ProcedureNode.AddOutputStatus.OK)
-            value.add_input(proc)
-            if value.get_add_input_status() \
-                    == ValueNode.AddInputStatus.ALREADY_LINKED:
-                self.__init_status = self.InitStatus.ALREADY_LINKED
-                self.__init_message = f"Already linked: '{socket_name}': '{value_name}'"
+            if self.__init_status == self.InitStatus.TOO_MANY_INPUTS:
+                self.__init_message = f"Too many inputs: '{slot_name}': '{value_name}'"
                 return
-            if value.get_add_input_status() \
-                    == ValueNode.AddInputStatus.TOO_MANY_INPUTS:
-                self.__init_status = self.InitStatus.TOO_MANY_INPUTS
-                self.__init_message = f"Too many inputs: '{socket_name}': '{value_name}'"
-                return
-            assert(value.get_add_input_status() == ValueNode.AddInputStatus.OK)
+
+    def __add_auto_value(self, name: str, value_type: type) -> None:
+        if name not in self.__values:
+            assert(name not in self.__auto_value_types)
+            self.__auto_value_types[name] = value_type
+            self.__values[name] = ValueNode(value_type)
+            return
+        assert(name in self.__auto_value_types)
+        if self.__auto_value_types[name] is not value_type:
+            self.__init_status = self.InitStatus.AUTO_VALUE_TYPE_MISMATCH
+            self.__init_message = \
+                f"Auto value '{name}' type mismatch:" + \
+                    f" {str(value_type)} and {str(self.__auto_value_types[name])}"
+
+    def __add_input(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
+        value.add_output(proc)
+        if value.get_add_output_status() \
+                == ValueNode.AddOutputStatus.ALREADY_LINKED:
+            self.__init_status = self.InitStatus.ALREADY_LINKED
+            return
+        assert(value.get_add_output_status() == ValueNode.AddOutputStatus.OK)
+        proc.add_input(slot_name, value)
+        if proc.get_add_input_status() \
+                == ProcedureNode.AddInputStatus.ALREADY_LINKED:
+            self.__init_status = self.InitStatus.ALREADY_LINKED
+            return
+        assert(proc.get_add_input_status() == ProcedureNode.AddInputStatus.OK)
+
+    def __add_output(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
+        proc.add_output(slot_name, value)
+        if proc.get_add_output_status() \
+                == ProcedureNode.AddOutputStatus.ALREADY_LINKED:
+            self.__init_status = self.InitStatus.ALREADY_LINKED
+            return
+        assert(proc.get_add_output_status() == ProcedureNode.AddOutputStatus.OK)
+        value.add_input(proc)
+        if value.get_add_input_status() \
+                == ValueNode.AddInputStatus.ALREADY_LINKED:
+            self.__init_status = self.InitStatus.ALREADY_LINKED
+            return
+        if value.get_add_input_status() \
+                == ValueNode.AddInputStatus.TOO_MANY_INPUTS:
+            self.__init_status = self.InitStatus.TOO_MANY_INPUTS
+            return
+        assert(value.get_add_input_status() == ValueNode.AddInputStatus.OK)
 
 
     # COMMANDS

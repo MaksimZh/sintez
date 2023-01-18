@@ -534,6 +534,33 @@ class Test_Simulator(unittest.TestCase):
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
+            (Divmod(),
+                {"left": int, "right": int},
+                {"quotient": "c", "remainder": "d"}),
+            ("c", int),
+            ("d", int),
+            (Divmod(),
+                {"left": "c", "right": "d"},
+                {"quotient": int, "remainder": int}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_init_message(), "")
+
+        s = Simulator([
+            (BlackHole(), {"foo": int}, {}),
+            (BlackHole(), {"foo": int}, {}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_init_message(), "")
+
+        s = Simulator([
+            (BlackHole(), {"foo": int}, {}),
+            (BlackHole(), {}, {"foo": int}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        self.assertEqual(s.get_init_message(), "")
+
+        s = Simulator([
             ("a", int),
             ("b", int),
             ("a", str),
@@ -594,6 +621,13 @@ class Test_Simulator(unittest.TestCase):
         self.assertEqual(s.get_init_status(), Simulator.InitStatus.TOO_MANY_INPUTS)
         self.assertEqual(s.get_init_message(), "Too many inputs: 'foo': 'a'")
 
+        s = Simulator([
+            (BlackHole(), {"foo": int}, {}),
+            (BlackHole(), {"foo": str}, {}),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.AUTO_VALUE_TYPE_MISMATCH)
+        self.assertEqual(s.get_init_message(),
+            "Auto value 'foo' type mismatch: <class 'str'> and <class 'int'>")
 
 
     def test_put(self):
@@ -660,7 +694,8 @@ class Test_Simulator(unittest.TestCase):
         self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
         self.assertEqual(s.get("c"), 14)
         self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
-    
+
+
     def test_Nested(self):
         ddm = Simulator([
             ("a", int),
