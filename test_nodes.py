@@ -777,6 +777,67 @@ class Test_Simulator(unittest.TestCase):
         self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
 
 
+class DuoDivmodProc:
+
+    __input: ProcInput
+    __output: ProcOutput
+    __simulator: Simulator
+
+    def __init__(self, input: ProcInput, output: ProcOutput) -> None:
+        self.__input = input
+        self.__output = output
+        self.__simulator = Simulator([
+            ("a", int),
+            ("b", int),
+            (DivmodProc,
+                {"left": "a", "right": "b"},
+                {"quotient": "c", "remainder": "d"}),
+            ("c", int),
+            ("d", int),
+            (DivmodProc,
+                {"left": "c", "right": "d"},
+                {"quotient": "e", "remainder": "f"}),
+            ("e", int),
+            ("f", int),
+        ])
+        assert(self.__simulator.get_init_status() == Simulator.InitStatus.OK)
+
+    def run(self) -> None:
+        self.__simulator.put("a", self.__input.get("left"))
+        assert(self.__input.get_get_status() == ProcInput.GetStatus.OK)
+        assert(self.__simulator.get_put_status() == Simulator.PutStatus.OK)
+        self.__simulator.put("b", self.__input.get("right"))
+        assert(self.__input.get_get_status() == ProcInput.GetStatus.OK)
+        assert(self.__simulator.get_put_status() == Simulator.PutStatus.OK)
+        self.__output.put("quotient", self.__simulator.get("e"))
+        assert(self.__simulator.get_get_status() == Simulator.GetStatus.OK)
+        assert(self.__output.get_put_status() == ProcOutput.PutStatus.OK)
+        self.__output.put("remainder", self.__simulator.get("f"))
+        assert(self.__simulator.get_get_status() == Simulator.GetStatus.OK)
+        assert(self.__output.get_put_status() == ProcOutput.PutStatus.OK)
+
+
+class Test_Nested(unittest.TestCase):
+    
+    def test(self):
+        s = Simulator([
+            ("a", int),
+            ("b", int),
+            (DuoDivmodProc,
+                {"left": "a", "right": "b"},
+                {"quotient": "c", "remainder": "d"}),
+            ("c", int),
+            ("d", int),
+        ])
+        self.assertEqual(s.get_init_status(), Simulator.InitStatus.OK)
+        s.put("a", 101)
+        s.put("b", 7)
+        self.assertEqual(s.get("c"), 4)
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
+        self.assertEqual(s.get("d"), 2)
+        self.assertEqual(s.get_get_status(), Simulator.GetStatus.OK)
+
+
 if __name__ == "__main__":
     del Test_ProcNodeIO
     unittest.main()
