@@ -1,6 +1,6 @@
 from typing import Any, Optional, Union
 from enum import Enum, auto
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 
 class ValueNode:
@@ -107,7 +107,7 @@ class ValueNode:
         if not self.__build_complete:
             self.__put_status = self.PutStatus.BUILD_INCOMPLETE
             return
-        if type(value) is not self.__value_type:
+        if not _type_fits(type(value), self.__value_type):
             self.__put_status = self.PutStatus.INCOMPATIBLE_TYPE
             return
         self.__put_status = self.PutStatus.OK
@@ -292,7 +292,7 @@ class ValueNode:
         return self.__get_status
 
 
-class ProcIO:
+class ProcIO(ABC):
 
     # QUERIES
 
@@ -324,8 +324,23 @@ class ProcIO:
 
 class ProcInput(ProcIO):
 
+    # check value state
+    # PRE: node is in the collection
+    @abstractmethod
+    def is_new(self, name: str) -> bool:
+        return False
+
+    class IsNewStatus(Enum):
+        NIL = auto(),
+        OK = auto(),
+        NOT_FOUND = auto(),
+
+    @abstractmethod
+    def get_is_new_status(self) -> IsNewStatus:
+        return self.IsNewStatus.NIL
+
+
     # get value of node
-    # PRE: building complete
     # PRE: node is in the collection
     @abstractmethod
     def get(self, name: str) -> Any:
@@ -334,7 +349,6 @@ class ProcInput(ProcIO):
     class GetStatus(Enum):
         NIL = auto(),
         OK = auto(),
-        BUILD_INCOMPLETE = auto(),
         NOT_FOUND = auto(),
 
     @abstractmethod
@@ -430,6 +444,7 @@ class ProcNodeIO(ProcIO):
     def has_node(self, node: ValueNode) -> bool:
         return node in self._nodes.values()
 
+
     # check if name is in collection
     def get_type(self, name: str) -> type:
         if name not in self._nodes:
@@ -438,9 +453,9 @@ class ProcNodeIO(ProcIO):
         self.__get_type_status = self.GetTypeStatus.OK
         return self._nodes[name].get_type()
 
-    __get_type_status: ProcOutput.GetTypeStatus
+    __get_type_status: ProcIO.GetTypeStatus
 
-    def get_get_type_status(self) -> ProcOutput.GetTypeStatus:
+    def get_get_type_status(self) -> ProcIO.GetTypeStatus:
         return self.__get_type_status
 
 
@@ -449,12 +464,25 @@ class ProcNodeInput(ProcNodeIO, ProcInput):
     # CONSTRUCTOR
     def __init__(self) -> None:
         super().__init__()
+        self.__is_new_status = self.IsNewStatus.NIL
         self.__get_status = self.GetStatus.NIL
 
+    
+    # check value state
+    def is_new(self, name: str) -> bool:
+        if name not in self._nodes:
+            self.__is_new_status = self.IsNewStatus.NOT_FOUND
+            return False
+        self.__is_new_status = self.IsNewStatus.OK
+        return self._nodes[name].get_state() == ValueNode.State.NEW
+
+    __is_new_status: ProcInput.IsNewStatus
+
+    def get_is_new_status(self) -> ProcInput.IsNewStatus:
+        return self.__is_new_status
+
     def get(self, name: str) -> Any:
-        if not self._build_complete:
-            self.__get_status = self.GetStatus.BUILD_INCOMPLETE
-            return
+        assert(self._build_complete)
         if not self.has_name(name):
             self.__get_status = self.GetStatus.NOT_FOUND
             return
@@ -471,14 +499,10 @@ class ProcNodeInput(ProcNodeIO, ProcInput):
 
 class ProcNodeOutput(ProcNodeIO, ProcOutput):
 
-    __incomplete_outputs: set[str]
-
     # CONSTRUCTOR
     def __init__(self) -> None:
         super().__init__()
-        self.__incomplete_outputs = set()
         self.__put_status = self.PutStatus.NIL
-        self.__reset_output_check_status = self.ResetOutputCheckStatus.NIL
         self.__is_output_complete_status = self.IsOutputCompleteStatus.NIL
 
 
@@ -487,9 +511,7 @@ class ProcNodeOutput(ProcNodeIO, ProcOutput):
     # get type of node
     # PRE: node is in the collection
     def put(self, name: str, value: Any) -> None:
-        if not self._build_complete:
-            self.__put_status = self.PutStatus.BUILD_INCOMPLETE
-            return
+        assert(self._build_complete)
         if not self.has_name(name):
             self.__put_status = self.PutStatus.NOT_FOUND
             return
@@ -499,34 +521,11 @@ class ProcNodeOutput(ProcNodeIO, ProcOutput):
         self.__put_status = self.PutStatus.OK
         self._nodes[name].put(value)
         assert(self._nodes[name].get_put_status() == ValueNode.PutStatus.OK)
-        if name in self.__incomplete_outputs:
-            self.__incomplete_outputs.remove(name)
 
     __put_status: ProcOutput.PutStatus
 
-    @abstractmethod
     def get_put_status(self) -> ProcOutput.PutStatus:
         return self.__put_status
-
-
-    # reset node-put-value status
-    def reset_output_check(self) -> None:
-        if not self._build_complete:
-            self.__reset_output_check_status = \
-                self.ResetOutputCheckStatus.BUILD_INCOMPLETE
-            return
-        self.__reset_output_check_status = self.ResetOutputCheckStatus.OK
-        self.__incomplete_outputs = set(self._nodes.keys())
-
-    class ResetOutputCheckStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-
-    __reset_output_check_status: ResetOutputCheckStatus
-
-    def get_reset_output_check_status(self) -> ResetOutputCheckStatus:
-        return self.__reset_output_check_status
 
 
     # QUERIES
@@ -538,7 +537,12 @@ class ProcNodeOutput(ProcNodeIO, ProcOutput):
                 self.IsOutputCompleteStatus.BUILD_INCOMPLETE
             return False
         self.__is_output_complete_status = self.IsOutputCompleteStatus.OK
-        return len(self.__incomplete_outputs) == 0
+        for output in self._nodes.values():
+            state = output.get_state()
+            assert(output.get_get_state_status() == ValueNode.GetStateStatus.OK)
+            if state == ValueNode.State.INVALID:
+                return False
+        return True
 
     class IsOutputCompleteStatus(Enum):
         NIL = auto(),
@@ -676,7 +680,6 @@ class ProcNode:
             if input.get_validate_status() != ValueNode.ValidateStatus.OK:
                 self.__run_status = self.RunStatus.INPUT_VALIDATION_FAILED
                 return
-        self.__outputs.reset_output_check()
         self.__proc.run()
         if not self.__outputs.is_output_complete():
             self.__run_status = self.RunStatus.INCOMPLETE_OUTPUT
@@ -908,3 +911,13 @@ class Simulator:
 
     def get_get_status(self) -> GetStatus:
         return self.__get_status
+
+
+def _type_fits(t: type, required: type) -> bool:
+    if issubclass(t, required):
+        return True
+    if required is complex:
+        return t is int or t is float
+    if required is float:
+        return t is int
+    return False

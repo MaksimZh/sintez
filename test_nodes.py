@@ -102,22 +102,25 @@ class Test_ValueNode(unittest.TestCase):
 
 
     def test_put_last(self):
-        v = ValueNode(int)
+        v = ValueNode(float)
         self.assertEqual(v.get_put_status(), ValueNode.PutStatus.NIL)
         v.put(1)
         self.assertEqual(v.get_put_status(), ValueNode.PutStatus.BUILD_INCOMPLETE)
         v.complete_build()
         self.assertEqual(v.get_state(), ValueNode.State.INVALID)
-        v.put(0.5)
+        v.put("foo")
         self.assertEqual(v.get_put_status(), ValueNode.PutStatus.INCOMPATIBLE_TYPE)
         self.assertEqual(v.get_state(), ValueNode.State.INVALID)
         v.put(1)
         self.assertEqual(v.get_put_status(), ValueNode.PutStatus.OK)
-        self.assertEqual(v.get_state(), ValueNode.State.REGULAR)
+        self.assertEqual(v.get_state(), ValueNode.State.NEW)
+        v.put(0.5)
+        self.assertEqual(v.get_put_status(), ValueNode.PutStatus.OK)
+        self.assertEqual(v.get_state(), ValueNode.State.NEW)
 
 
     def test_put_mid(self):
-        v = ValueNode(int)
+        v = ValueNode(float)
         p = ProcNode(FailProc)
         v.add_output(p)
         p.complete_build()
@@ -127,11 +130,15 @@ class Test_ValueNode(unittest.TestCase):
         v.complete_build()
         self.assertEqual(v.get_state(), ValueNode.State.INVALID)
         self.assertEqual(p.get_invalidate_status(), ProcNode.InvalidateStatus.NIL)
-        v.put(0.5)
+        v.put("foo")
         self.assertEqual(v.get_put_status(), ValueNode.PutStatus.INCOMPATIBLE_TYPE)
         self.assertEqual(v.get_state(), ValueNode.State.INVALID)
         self.assertEqual(p.get_invalidate_status(), ProcNode.InvalidateStatus.NIL)
         v.put(1)
+        self.assertEqual(v.get_put_status(), ValueNode.PutStatus.OK)
+        self.assertEqual(v.get_state(), ValueNode.State.NEW)
+        self.assertEqual(p.get_invalidate_status(), ProcNode.InvalidateStatus.OK)
+        v.put(0.5)
         self.assertEqual(v.get_put_status(), ValueNode.PutStatus.OK)
         self.assertEqual(v.get_state(), ValueNode.State.NEW)
         self.assertEqual(p.get_invalidate_status(), ProcNode.InvalidateStatus.OK)
@@ -313,6 +320,26 @@ class Test_ProcNodeInput(Test_ProcNodeIO):
         self.T = ProcNodeInput
         super().__init__(methodName)
 
+    
+    def test_is_new(self):
+        o = ProcNodeInput()
+        v = ValueNode(int)
+        p = ProcNode(SuccessProc)
+        v.add_output(p)
+        p.add_input("a", v)
+        v.complete_build()
+        p.complete_build()
+        o.add("a", v)
+        o.complete_build()
+        self.assertEqual(o.get_is_new_status(), ProcNodeInput.IsNewStatus.NIL)
+        self.assertFalse(o.is_new("a"))
+        self.assertEqual(o.get_is_new_status(), ProcNodeInput.IsNewStatus.OK)
+        o.is_new("b")
+        self.assertEqual(o.get_is_new_status(), ProcNodeInput.IsNewStatus.NOT_FOUND)
+        v.put(1)
+        self.assertTrue(o.is_new("a"))
+        self.assertEqual(o.get_is_new_status(), ProcNodeInput.IsNewStatus.OK)
+
 
     def test_get(self):
         o = ProcNodeInput()
@@ -324,10 +351,8 @@ class Test_ProcNodeInput(Test_ProcNodeIO):
         o.add("b", v2)
         v1.put(1)
         v2.put("foo")
-        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.NIL)
-        o.get("a")
-        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.BUILD_INCOMPLETE)
         o.complete_build()
+        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.NIL)
         self.assertEqual(o.get("a"), 1)
         self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.OK)
         self.assertEqual(o.get("b"), "foo")
@@ -347,10 +372,8 @@ class Test_ProcNodeOutput(Test_ProcNodeIO):
         v = ValueNode(int)
         v.complete_build()
         o.add("a", v)
-        self.assertEqual(o.get_put_status(), ProcNodeOutput.PutStatus.NIL)
-        o.put("a", 1)
-        self.assertEqual(o.get_put_status(), ProcNodeOutput.PutStatus.BUILD_INCOMPLETE)
         o.complete_build()
+        self.assertEqual(o.get_put_status(), ProcNodeOutput.PutStatus.NIL)
         o.put("b", 1)
         self.assertEqual(o.get_put_status(), ProcNodeOutput.PutStatus.NOT_FOUND)
         o.put("a", "foo")
@@ -369,20 +392,12 @@ class Test_ProcNodeOutput(Test_ProcNodeIO):
         v2.complete_build()
         o.add("a", v1)
         o.add("b", v2)
-        self.assertEqual(o.get_reset_output_check_status(),
-            ProcNodeOutput.ResetOutputCheckStatus.NIL)
         self.assertEqual(o.get_is_output_complete_status(),
             ProcNodeOutput.IsOutputCompleteStatus.NIL)
-        o.reset_output_check()
-        self.assertEqual(o.get_reset_output_check_status(),
-            ProcNodeOutput.ResetOutputCheckStatus.BUILD_INCOMPLETE)
         o.is_output_complete()
         self.assertEqual(o.get_is_output_complete_status(),
             ProcNodeOutput.IsOutputCompleteStatus.BUILD_INCOMPLETE)
         o.complete_build()
-        o.reset_output_check()
-        self.assertEqual(o.get_reset_output_check_status(),
-            ProcNodeOutput.ResetOutputCheckStatus.OK)
         self.assertFalse(o.is_output_complete())
         self.assertEqual(o.get_is_output_complete_status(),
             ProcNodeOutput.IsOutputCompleteStatus.OK)
