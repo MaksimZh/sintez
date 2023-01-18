@@ -242,10 +242,10 @@ class Test_ValueNode(unittest.TestCase):
         v.validate()
         self.assertEqual(v.get_validate_status(), ValueNode.ValidateStatus.BUILD_INCOMPLETE)
         v.complete_build()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.NIL)
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.NIL)
         v.validate()
         self.assertEqual(v.get_validate_status(), ValueNode.ValidateStatus.INPUT_FAILED)
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.FAIL)
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.FAIL)
 
 
     def test_validate_mid_success(self):
@@ -255,10 +255,10 @@ class Test_ValueNode(unittest.TestCase):
         p.add_output("a", v)
         p.complete_build()
         v.complete_build()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.NIL)
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.NIL)
         v.validate()
         self.assertEqual(v.get_validate_status(), ValueNode.ValidateStatus.OK)
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.OK)
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.OK)
 
 
     def test_get_type(self):
@@ -351,7 +351,7 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v2.get_invalidate_status(), ValueNode.InvalidateStatus.OK)
 
 
-    def test_run_empty(self):
+    def test_validate_fail(self):
         p = ProcedureNode(WhiteHole())
         v1 = ValueNode(int)
         v2 = ValueNode(int)
@@ -367,26 +367,26 @@ class Test_ProcNode(unittest.TestCase):
         v2.complete_build()
         v3.complete_build()
         v4.complete_build()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.NIL)
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.NIL)
         self.assertEqual(v1.get_validate_status(), ValueNode.ValidateStatus.NIL)
         self.assertEqual(v2.get_validate_status(), ValueNode.ValidateStatus.NIL)
         self.assertEqual(v1.get_used_by_status(), ValueNode.UsedByStatus.NIL)
         self.assertEqual(v2.get_used_by_status(), ValueNode.UsedByStatus.NIL)
-        p.run()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.BUILD_INCOMPLETE)
+        p.validate()
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.BUILD_INCOMPLETE)
         self.assertEqual(v1.get_validate_status(), ValueNode.ValidateStatus.NIL)
         self.assertEqual(v2.get_validate_status(), ValueNode.ValidateStatus.NIL)
         self.assertEqual(v1.get_used_by_status(), ValueNode.UsedByStatus.NIL)
         self.assertEqual(v2.get_used_by_status(), ValueNode.UsedByStatus.NIL)
         p.complete_build()
-        p.run()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.INPUT_VALIDATION_FAILED)
+        p.validate()
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.INPUT_VALIDATION_FAILED)
         v1.put(1)
         v2.put(2)
         self.assertEqual(v3.get_put_status(), ValueNode.PutStatus.NIL)
         self.assertEqual(v4.get_put_status(), ValueNode.PutStatus.NIL)
-        p.run()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.FAIL)
+        p.validate()
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.FAIL)
         self.assertEqual(v1.get_validate_status(), ValueNode.ValidateStatus.OK)
         self.assertEqual(v2.get_validate_status(), ValueNode.ValidateStatus.OK)
         self.assertEqual(v1.get_used_by_status(), ValueNode.UsedByStatus.NIL)
@@ -395,7 +395,7 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v4.get_put_status(), ValueNode.PutStatus.NIL)
 
 
-    def test_run(self):
+    def test_validate_success(self):
         p = ProcedureNode(BlackHole())
         v1 = ValueNode(int)
         v2 = ValueNode(int)
@@ -416,8 +416,8 @@ class Test_ProcNode(unittest.TestCase):
         v2.put(2)
         self.assertEqual(v3.get_put_status(), ValueNode.PutStatus.NIL)
         self.assertEqual(v4.get_put_status(), ValueNode.PutStatus.NIL)
-        p.run()
-        self.assertEqual(p.get_run_status(), ProcedureNode.RunStatus.OK)
+        p.validate()
+        self.assertEqual(p.get_validate_status(), ProcedureNode.ValidateStatus.OK)
         self.assertEqual(v1.get_validate_status(), ValueNode.ValidateStatus.OK)
         self.assertEqual(v2.get_validate_status(), ValueNode.ValidateStatus.OK)
         self.assertEqual(v1.get_used_by_status(), ValueNode.UsedByStatus.OK)

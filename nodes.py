@@ -1,8 +1,8 @@
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, final
 from enum import Enum, auto
 from abc import ABC, abstractmethod
 
-
+@final
 class ValueNode:
 
     __value_type: type
@@ -208,8 +208,8 @@ class ValueNode:
             self.__validate_status = self.ValidateStatus.NO_VALUE_SOURCE
             return
         assert(self.__input)
-        self.__input.run()
-        if self.__input.get_run_status() != ProcedureNode.RunStatus.OK:
+        self.__input.validate()
+        if self.__input.get_validate_status() != ProcedureNode.ValidateStatus.OK:
             self.__validate_status = self.ValidateStatus.INPUT_FAILED
             return
         self.__validate_status = self.ValidateStatus.OK
@@ -318,15 +318,16 @@ class Procedure(ABC):
 
     _put_status: PutStatus
 
+    @final
     def get_put_status(self) -> PutStatus:
         return self._put_status
 
 
     # QUERIES
 
-    # set input value
+    # get value
     # PRE: name is acceptable
-    # PRE: all input values are set
+    # PRE: there is enough data to calculate value
     @abstractmethod
     def get(self, name: str) -> Any:
         pass
@@ -340,10 +341,12 @@ class Procedure(ABC):
 
     _get_status: GetStatus
 
+    @final
     def get_get_status(self) -> GetStatus:
         return self._get_status
 
 
+@final
 class ProcedureNode:
 
     __procedure: Procedure
@@ -360,7 +363,7 @@ class ProcedureNode:
         self.__add_input_status = self.AddInputStatus.NIL
         self.__add_output_status = self.AddOutputStatus.NIL
         self.__invalidate_status = self.InvalidateStatus.NIL
-        self.__run_status = self.RunStatus.NIL
+        self.__validate_status = self.ValidateStatus.NIL
 
 
     # COMMANDS
@@ -433,6 +436,8 @@ class ProcedureNode:
 
 
     # signal that input state changed to NEW or INVALID
+    # PRE: build complete
+    # POST: all outputs get invalidate command
     def invalidate(self) -> None:
         if not self.__build_complete:
             self.__invalidate_status = self.InvalidateStatus.BUILD_INCOMPLETE
@@ -448,7 +453,6 @@ class ProcedureNode:
         OK = auto(),
         BUILD_INCOMPLETE = auto(),
 
-
     __invalidate_status: InvalidateStatus
 
     def get_invalidate_status(self) -> InvalidateStatus:
@@ -456,14 +460,20 @@ class ProcedureNode:
 
 
     # run the procedure
-    def run(self) -> None:
+    # PRE: build complete
+    # PRE: inputs can be validated
+    # PRE: inputs and outputs compatible with the procedure
+    # POST: all inputs have been validated
+    # POST: the procedure have been run
+    # POST: all outputs have been updated
+    def validate(self) -> None:
         if not self.__build_complete:
-            self.__run_status = self.RunStatus.BUILD_INCOMPLETE
+            self.__validate_status = self.ValidateStatus.BUILD_INCOMPLETE
             return
         for input in self.__inputs.values():
             input.validate()
             if input.get_validate_status() != ValueNode.ValidateStatus.OK:
-                self.__run_status = self.RunStatus.INPUT_VALIDATION_FAILED
+                self.__validate_status = self.ValidateStatus.INPUT_VALIDATION_FAILED
                 return
         for name, input in self.__inputs.items():
             state = input.get_state()
@@ -475,33 +485,33 @@ class ProcedureNode:
             assert(input.get_get_status() == ValueNode.GetStatus.OK)
             self.__procedure.put(name, value)
             if self.__procedure.get_put_status() != Procedure.PutStatus.OK:
-                self.__run_status = self.RunStatus.FAIL
+                self.__validate_status = self.ValidateStatus.FAIL
                 return
         for name, output in self.__outputs.items():
             value = self.__procedure.get(name)
             if self.__procedure.get_get_status() != Procedure.GetStatus.OK:
-                self.__run_status = self.RunStatus.FAIL
+                self.__validate_status = self.ValidateStatus.FAIL
                 return
             output.put(value)
             if output.get_put_status() != ValueNode.PutStatus.OK:
-                self.__run_status = self.RunStatus.FAIL
+                self.__validate_status = self.ValidateStatus.FAIL
                 return
-        self.__run_status = self.RunStatus.OK
+        self.__validate_status = self.ValidateStatus.OK
         for input in self.__inputs.values():
             input.used_by(self)
             assert(input.get_used_by_status() == ValueNode.UsedByStatus.OK)
 
-    class RunStatus(Enum):
+    class ValidateStatus(Enum):
         NIL = auto(),
         OK = auto(),
         BUILD_INCOMPLETE = auto(),
         INPUT_VALIDATION_FAILED = auto(),
         FAIL = auto(),
 
-    __run_status: RunStatus
+    __validate_status: ValidateStatus
 
-    def get_run_status(self) -> RunStatus:
-        return self.__run_status
+    def get_validate_status(self) -> ValidateStatus:
+        return self.__validate_status
 
 
     # QUERIES
@@ -578,9 +588,11 @@ class Simulator(Procedure):
     __init_status: InitStatus
     __init_message: str
 
+    @final
     def get_init_status(self) -> InitStatus:
         return self.__init_status
 
+    @final
     def get_init_message(self) -> str:
         return self.__init_message
 
@@ -700,6 +712,7 @@ class Simulator(Procedure):
 
     # COMMANDS
 
+    @final
     def put(self, name: str, value: Any) -> None:
         if self.get_init_status() != self.InitStatus.OK:
             self._put_status = self.PutStatus.INTERNAL_ERROR
@@ -717,6 +730,7 @@ class Simulator(Procedure):
 
     # QUERIES
 
+    @final
     def get(self, name: str) -> Any:
         if self.get_init_status() != self.InitStatus.OK:
             self._get_status = self.GetStatus.INTERNAL_ERROR
