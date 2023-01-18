@@ -1,11 +1,13 @@
 import unittest
+from typing import Type
 
-from nodes import ValueNode, ProcNode, ProcOutput, ProcNodeOutput
+from nodes import ValueNode, ProcNode, \
+    ProcInput, ProcOutput, ProcNodeIO, ProcNodeInput, ProcNodeOutput
 
 
 class FailProc:
 
-    def __init__(self, output: ProcOutput) -> None:
+    def __init__(self, input: ProcInput, output: ProcOutput) -> None:
         pass
 
     def run(self) -> None:
@@ -14,12 +16,16 @@ class FailProc:
 
 class SuccessProc:
 
+    __input: ProcInput
     __output: ProcOutput
 
-    def __init__(self, output: ProcOutput) -> None:
+    def __init__(self, input: ProcInput, output: ProcOutput) -> None:
+        self.__input = input
         self.__output = output
 
     def run(self) -> None:
+        for name in self.__input.get_nodes().keys():
+            self.__input.get(name)
         for name in self.__output.get_nodes().keys():
             self.__output.put(name, self.__output.get_type(name)())
 
@@ -224,31 +230,33 @@ class Test_ValueNode(unittest.TestCase):
         self.assertEqual(v.get_get_status(), ValueNode.GetStatus.OK)
 
 
-class Test_ProcNodeOutput(unittest.TestCase):
+class Test_ProcNodeIO(unittest.TestCase):
+
+    T: Type[ProcNodeIO]
 
     def test_build(self):
-        o = ProcNodeOutput()
+        o = self.T()
         v1 = ValueNode(int)
         v2 = ValueNode(str)
         v3 = ValueNode(float)
-        self.assertEqual(o.get_add_status(), ProcNodeOutput.AddStatus.NIL)
+        self.assertEqual(o.get_add_status(), self.T.AddStatus.NIL)
         o.add("a", v1)
-        self.assertEqual(o.get_add_status(), ProcNodeOutput.AddStatus.OK)
+        self.assertEqual(o.get_add_status(), self.T.AddStatus.OK)
         o.add("b", v1)
-        self.assertEqual(o.get_add_status(), ProcNodeOutput.AddStatus.DUPLICATE_NODE)
+        self.assertEqual(o.get_add_status(), self.T.AddStatus.DUPLICATE_NODE)
         o.add("a", v2)
-        self.assertEqual(o.get_add_status(), ProcNodeOutput.AddStatus.DUPLICATE_NAME)
+        self.assertEqual(o.get_add_status(), self.T.AddStatus.DUPLICATE_NAME)
         o.add("b", v2)
-        self.assertEqual(o.get_add_status(), ProcNodeOutput.AddStatus.OK)
+        self.assertEqual(o.get_add_status(), self.T.AddStatus.OK)
         self.assertEqual(o.get_nodes(), {"a": v1, "b": v2})
         o.complete_build()
         o.add("c", v3)
-        self.assertEqual(o.get_add_status(), ProcNodeOutput.AddStatus.BUILD_COMPLETE)
+        self.assertEqual(o.get_add_status(), self.T.AddStatus.BUILD_COMPLETE)
         self.assertEqual(o.get_nodes(), {"a": v1, "b": v2})
 
     
     def test_has(self):
-        o = ProcNodeOutput()
+        o = self.T()
         v1 = ValueNode(int)
         v2 = ValueNode(str)
         v3 = ValueNode(float)
@@ -263,19 +271,54 @@ class Test_ProcNodeOutput(unittest.TestCase):
 
     
     def test_get_type(self):
-        o = ProcNodeOutput()
+        o = self.T()
         v1 = ValueNode(int)
         v2 = ValueNode(str)
         o.add("a", v1)
         o.add("b", v2)
-        self.assertEqual(o.get_get_type_status(), ProcNodeOutput.GetTypeStatus.NIL)
+        self.assertEqual(o.get_get_type_status(), self.T.GetTypeStatus.NIL)
         self.assertIs(o.get_type("a"), int)
-        self.assertEqual(o.get_get_type_status(), ProcNodeOutput.GetTypeStatus.OK)
+        self.assertEqual(o.get_get_type_status(), self.T.GetTypeStatus.OK)
         self.assertIs(o.get_type("b"), str)
-        self.assertEqual(o.get_get_type_status(), ProcNodeOutput.GetTypeStatus.OK)
+        self.assertEqual(o.get_get_type_status(), self.T.GetTypeStatus.OK)
         o.get_type("c")
-        self.assertEqual(o.get_get_type_status(), ProcNodeOutput.GetTypeStatus.NOT_FOUND)
+        self.assertEqual(o.get_get_type_status(), self.T.GetTypeStatus.NOT_FOUND)
 
+
+class Test_ProcNodeInput(Test_ProcNodeIO):
+
+    def __init__(self, methodName: str = ...) -> None:
+        self.T = ProcNodeInput
+        super().__init__(methodName)
+
+
+    def test_get(self):
+        o = ProcNodeInput()
+        v1 = ValueNode(int)
+        v2 = ValueNode(str)
+        v1.complete_build()
+        v2.complete_build()
+        o.add("a", v1)
+        o.add("b", v2)
+        v1.put(1)
+        v2.put("foo")
+        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.NIL)
+        o.get("a")
+        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.BUILD_INCOMPLETE)
+        o.complete_build()
+        self.assertEqual(o.get("a"), 1)
+        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.OK)
+        self.assertEqual(o.get("b"), "foo")
+        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.OK)
+        o.get("c")
+        self.assertEqual(o.get_get_status(), ProcNodeInput.GetStatus.NOT_FOUND)
+
+
+class Test_ProcNodeOutput(Test_ProcNodeIO):
+
+    def __init__(self, methodName: str = ...) -> None:
+        self.T = ProcNodeOutput
+        super().__init__(methodName)
 
     def test_put(self):
         o = ProcNodeOutput()
@@ -442,6 +485,7 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(v3.get_put_status(), ValueNode.PutStatus.NIL)
         self.assertEqual(v4.get_put_status(), ValueNode.PutStatus.NIL)
 
+    
     def test_run(self):
         p = ProcNode(SuccessProc)
         v1 = ValueNode(int)
@@ -474,4 +518,5 @@ class Test_ProcNode(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    del Test_ProcNodeIO
     unittest.main()

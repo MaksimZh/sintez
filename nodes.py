@@ -322,6 +322,26 @@ class ProcIO:
         return self.GetTypeStatus.NIL
 
 
+class ProcInput(ProcIO):
+    
+    # get value of node
+    # PRE: building complete
+    # PRE: node is in the collection
+    @abstractmethod
+    def get(self, name: str) -> Any:
+        return object
+
+    class GetStatus(Enum):
+        NIL = auto(),
+        OK = auto(),
+        BUILD_INCOMPLETE = auto(),
+        NOT_FOUND = auto(),
+
+    @abstractmethod
+    def get_get_status(self) -> GetStatus:
+        return self.GetTypeStatus.NIL
+
+
 class ProcOutput(ProcIO):
     
     # COMMANDS
@@ -424,6 +444,31 @@ class ProcNodeIO(ProcIO):
         return self.__get_type_status
 
 
+class ProcNodeInput(ProcNodeIO, ProcInput):
+
+    # CONSTRUCTOR
+    def __init__(self) -> None:
+        super().__init__()
+        self.__get_status = self.GetStatus.NIL
+
+    def get(self, name: str) -> Any:
+        if not self._build_complete:
+            self.__get_status = self.GetStatus.BUILD_INCOMPLETE
+            return
+        if not self.has_name(name):
+            self.__get_status = self.GetStatus.NOT_FOUND
+            return
+        self.__get_status = self.GetStatus.OK
+        value = self._nodes[name].get()
+        assert(self._nodes[name].get_get_status() == ValueNode.GetStatus.OK)
+        return value
+
+    __get_status: ProcInput.GetStatus
+
+    def get_get_status(self) -> ProcInput.GetStatus:
+        return self.__get_status
+
+
 class ProcNodeOutput(ProcNodeIO, ProcOutput):
 
     __incomplete_outputs: set[str]
@@ -510,14 +555,14 @@ class ProcNode:
 
     __proc_type: type
     __proc: Any
-    __inputs: dict[str, "ValueNode"]
+    __inputs: ProcNodeInput
     __outputs: ProcNodeOutput
     __build_complete: bool
 
     # CONSTRUCTOR
     def __init__(self, proc_type: type) -> None:
         self.__proc_type = proc_type
-        self.__inputs = dict()
+        self.__inputs = ProcNodeInput()
         self.__outputs = ProcNodeOutput()
         self.__build_complete = False
         self.__add_input_status = self.AddInputStatus.NIL
@@ -536,13 +581,13 @@ class ProcNode:
         if self.__build_complete:
             self.__add_input_status = self.AddInputStatus.BUILD_COMPLETE
             return
-        if input in self.__inputs.values() or self.__outputs.has_node(input):
+        if self.__inputs.has_node(input) or self.__outputs.has_node(input):
             self.__add_input_status = self.AddInputStatus.ALREADY_LINKED
             return
-        if name in self.__inputs or self.__outputs.has_name(name):
+        if self.__inputs.has_name(name) or self.__outputs.has_name(name):
             self.__add_input_status = self.AddInputStatus.DUPLICATE_NAME
             return
-        self.__inputs[name] = input
+        self.__inputs.add(name, input)
         self.__add_input_status = self.AddInputStatus.OK
 
     class AddInputStatus(Enum):
@@ -566,10 +611,10 @@ class ProcNode:
         if self.__build_complete:
             self.__add_output_status = self.AddOutputStatus.BUILD_COMPLETE
             return
-        if output in self.__inputs.values() or self.__outputs.has_node(output):
+        if self.__inputs.has_node(output) or self.__outputs.has_node(output):
             self.__add_output_status = self.AddOutputStatus.ALREADY_LINKED
             return
-        if name in self.__inputs or self.__outputs.has_name(name):
+        if self.__inputs.has_name(name) or self.__outputs.has_name(name):
             self.__add_output_status = self.AddOutputStatus.DUPLICATE_NAME
             return
         self.__outputs.add(name, output)
@@ -593,7 +638,7 @@ class ProcNode:
     # POST: build complete
     def complete_build(self) -> None:
         self.__outputs.complete_build()
-        self.__proc = self.__proc_type(self.__outputs)
+        self.__proc = self.__proc_type(self.__inputs, self.__outputs)
         self.__build_complete = True
 
 
@@ -625,7 +670,7 @@ class ProcNode:
         if not self.__build_complete:
             self.__run_status = self.RunStatus.BUILD_INCOMPLETE
             return
-        for input in self.__inputs.values():
+        for input in self.__inputs.get_nodes().values():
             input.validate()
             assert(input.get_validate_status() == ValueNode.ValidateStatus.OK)
         self.__outputs.reset_output_check()
@@ -634,7 +679,7 @@ class ProcNode:
             self.__run_status = self.RunStatus.INCOMPLETE_OUTPUT
             return
         self.__run_status = self.RunStatus.OK
-        for input in self.__inputs.values():
+        for input in self.__inputs.get_nodes().values():
             input.used_by(self)
             assert(input.get_used_by_status() == ValueNode.UsedByStatus.OK)
 
@@ -654,7 +699,7 @@ class ProcNode:
 
     # get dictionary of input nodes
     def get_inputs(self) -> dict[str, "ValueNode"]:
-        return self.__inputs
+        return self.__inputs.get_nodes()
 
     # get dictionary of output nodes
     def get_outputs(self) -> dict[str, "ValueNode"]:
