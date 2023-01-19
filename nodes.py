@@ -2,6 +2,34 @@ from typing import Any, Optional, Union, final
 from enum import Enum, auto
 from abc import ABC, abstractmethod
 
+# Nodes implement the calculation scheme logic.
+#
+# ValueNode can be linked only to ProcedureNodes and vice versa.
+# All links have one and only one direction, no loops allowed.
+# The basic concepts of calculation are invalidation and validation.
+# Value change invalidates all succeeding nodes.
+# Procedure validation also validates all its output nodes.
+# When node is invalidated it invalidates all succeeding nodes.
+# When node is validated it requests validation of all preceding nodes.
+#
+# When node is created its build is incomplete.
+# Inputs and outputs can be added only before build is complete.
+# Manipulations concerning calculation logic are forbidden until build is complete.
+
+
+# Implements value node part of calculation scheme logic.
+# Can have only one (optional) input procedure.
+# So there is only one component responsible for value update.
+#
+# Contains:
+#     - input procedure node (optional)
+#     - output procedure nodes (any number)
+#     - value type
+#     - build status
+#     - value state (INVALID, NEW, REGULAR)
+#     - value (optional)
+#     - outputs that have not used NEW value
+#
 @final
 class ValueNode:
 
@@ -14,6 +42,10 @@ class ValueNode:
     __waiting_outputs: set["ProcedureNode"]
 
     # CONSTRUCTOR
+    # POST: no input node
+    # POST: no output nodes
+    # POST: value type is set
+    # POST: build not complete
     def __init__(self, value_type: type) -> None:
         self.__value_type = value_type
         self.__state = self.State.INVALID
@@ -34,10 +66,10 @@ class ValueNode:
     # COMMANDS
 
     # add input node
-    # PRE: building not complete
-    # PRE: node not linked to this
+    # PRE: build not complete
+    # PRE: 'input' is not in input or outputs
     # PRE: this node has no inputs
-    # POST: node linked as input to this
+    # POST: input is set to 'input'
     def add_input(self, input: "ProcedureNode") -> None:
         if self.__build_complete:
             self.__add_input_status = self.AddInputStatus.BUILD_COMPLETE
@@ -64,10 +96,10 @@ class ValueNode:
         return self.__add_input_status
 
 
-    # add outinput node
-    # PRE: building not complete
-    # PRE: node not linked to this
-    # POST: node linked as output to this
+    # add output node
+    # PRE: build not complete
+    # PRE: 'output' is not in input or outputs
+    # POST: 'output' added to output nodes
     def add_output(self, output: "ProcedureNode") -> None:
         if self.__build_complete:
             self.__add_output_status = self.AddOutputStatus.BUILD_COMPLETE
@@ -99,10 +131,11 @@ class ValueNode:
 
     # put value
     # PRE: build complete
-    # PRE: value of proper type
-    # POST: value is set
+    # PRE: 'value' can be implicitly converted to node type
     # POST: if there are outputs then state is NEW else REGULAR
-    # POST: all outputs get invalidate command
+    # POST: value is set to 'value'
+    # POST: send invalidate command to all outputs
+    # POST: no outputs used NEW value
     def put(self, value: Any) -> None:
         if not self.__build_complete:
             self.__put_status = self.PutStatus.BUILD_INCOMPLETE
@@ -132,10 +165,10 @@ class ValueNode:
         return self.__put_status
 
 
-    # set state to INVALID
+    # invalidate node
     # PRE: build complete
     # POST: state is INVALID
-    # POST: if the state has changed then all outputs get invalidate command
+    # POST: if the state has changed then send invalidate command to all outputs
     def invalidate(self) -> None:
         if not self.__build_complete:
             self.__invalidate_status = self.InvalidateStatus.BUILD_INCOMPLETE
@@ -162,9 +195,10 @@ class ValueNode:
 
     # notify that the value was used by output
     # PRE: build complete
-    # PRE: output is linked
-    # PRE: not in INVALID state
-    # POST: if state is NEW and all outputs used value then set state to REGULAR
+    # PRE: 'output' is in outputs
+    # PRE: state is not INVALID
+    # POST: 'output' used new value
+    # POST: if all outputs used the value then set state to REGULAR
     def used_by(self, output: "ProcedureNode") -> None:
         if not self.__build_complete:
             self.__used_by_status = self.UsedByStatus.BUILD_INCOMPLETE
@@ -196,7 +230,7 @@ class ValueNode:
     # ensure that the value is valid
     # PRE: build complete
     # PRE: there is input or the state is not INVALID
-    # POST: if the state is INVALID then the input gets run command
+    # POST: if the state is INVALID then send validate command to input
     def validate(self) -> None:
         if not self.__build_complete:
             self.__validate_status = self.ValidateStatus.BUILD_INCOMPLETE
@@ -292,6 +326,14 @@ class ValueNode:
         return self.__get_status
 
 
+# Base class for the internal procedure of ProcedureNode
+# 
+# When the user gets any output value it must be up to date with input values.
+#
+# Contains:
+#     - named and typed input values
+#     - named output values 
+#
 class Procedure(ABC):
 
     def __init__(self) -> None:
@@ -346,6 +388,14 @@ class Procedure(ABC):
         return self._get_status
 
 
+# Implements procedure node part of calculation scheme logic.
+#
+# Contains:
+#     - input value nodes (any number)
+#     - output procedure nodes (any number)
+#     - build status
+#     - procedure
+#
 @final
 class ProcedureNode:
 
@@ -355,6 +405,10 @@ class ProcedureNode:
     __build_complete: bool
 
     # CONSTRUCTOR
+    # POST: no input nodes
+    # POST: no output nodes
+    # POST: procedure is set
+    # POST: build not complete
     def __init__(self, procedure: Procedure) -> None:
         self.__procedure = procedure
         self.__inputs = dict()
@@ -369,9 +423,10 @@ class ProcedureNode:
     # COMMANDS
 
     # add input node
-    # PRE: building not complete
-    # PRE: node not linked to this
-    # POST: node linked as input to this
+    # PRE: build not complete
+    # PRE: 'input' is not in inputs or outputs
+    # PRE: 'name' is not occupied
+    # POST: 'input' added to inputs with 'name'
     def add_input(self, name: str, input: ValueNode) -> None:
         if self.__build_complete:
             self.__add_input_status = self.AddInputStatus.BUILD_COMPLETE
@@ -399,9 +454,10 @@ class ProcedureNode:
 
 
     # add output node
-    # PRE: building not complete
-    # PRE: node not linked to this
-    # POST: node linked as output to this
+    # PRE: build not complete
+    # PRE: 'output' is not in inputs or outputs
+    # PRE: 'name' is not occupied
+    # POST: 'output' added to outputs with 'name'
     def add_output(self, name: str, output: ValueNode) -> None:
         if self.__build_complete:
             self.__add_output_status = self.AddOutputStatus.BUILD_COMPLETE
@@ -429,7 +485,6 @@ class ProcedureNode:
 
 
     # complete build
-    # POST: procedure initialized
     # POST: build complete
     def complete_build(self) -> None:
         self.__build_complete = True
@@ -462,10 +517,10 @@ class ProcedureNode:
     # run the procedure
     # PRE: build complete
     # PRE: inputs can be validated
-    # PRE: inputs and outputs compatible with the procedure
+    # PRE: inputs and outputs names and types compatible with the procedure
     # POST: all inputs have been validated
-    # POST: the procedure have been run
-    # POST: all outputs have been updated
+    # POST: inputs in NEW state were sent to procedure with set command
+    # POST: all outputs have been updated using procedure get query
     def validate(self) -> None:
         if not self.__build_complete:
             self.__validate_status = self.ValidateStatus.BUILD_INCOMPLETE
@@ -539,6 +594,20 @@ ValuePattern = tuple[str, type]
 ProcPattern = tuple[Procedure, dict[str, ValueLink], dict[str, ValueLink]]
 NodePattern = Union[ValuePattern, ProcPattern]
 
+# Special kind of procedure that contains calculation scheme built using
+# its declarative description sent to constructor.
+#
+# The description is list of value and procedure patterns.
+# Value pattern is the following tuple:
+#     ("name", ValueType).
+# Procedure pattern is the following tuple:
+#     (ProcedureType, <input_dictionary>, <output_dictionary>).
+# Entries in input and output dictionaries are of the following two kinds:
+#     "name_in_procedure": "value_node_name" - link to value node by name
+#     "name_in_procedure_and_outside": Type - create value node and link to it
+# If the second kind of I/O entry is used in multiple places with the same name
+# then their types must match. 
+#
 class Simulator(Procedure):
 
     __values: dict[str, ValueNode]
