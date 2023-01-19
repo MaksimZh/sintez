@@ -21,6 +21,8 @@ from abc import ABC, abstractmethod
 # Can have only one (optional) input procedure.
 # So there is only one component responsible for value update.
 #
+# Note that value must be validated before 'get' query is used.
+#
 # Contains:
 #     - input procedure node (optional)
 #     - output procedure nodes (any number)
@@ -329,6 +331,7 @@ class ValueNode:
 # Base class for the internal procedure of ProcedureNode
 # 
 # When the user gets any output value it must be up to date with input values.
+# Procedure implementation must take care of the (protected) status fields.
 #
 # Contains:
 #     - named and typed input values
@@ -605,7 +608,7 @@ NodePattern = Union[ValuePattern, ProcPattern]
 # Entries in input and output dictionaries are of the following two kinds:
 #     "name_in_procedure": "value_node_name" - link to value node by name
 #     "name_in_procedure_and_outside": Type - create value node and link to it
-# If the second kind of I/O entry is used in multiple places with the same name
+# If multiple I/O entries of the 2nd kind have the same name
 # then their types must match. 
 #
 class Simulator(Procedure):
