@@ -1,6 +1,7 @@
 from typing import Any, Optional, Union, final
 from enum import Enum, auto
 from abc import ABC, abstractmethod
+from mss import Status, status
 
 # Nodes implement the calculation scheme logic.
 #
@@ -33,7 +34,7 @@ from abc import ABC, abstractmethod
 #     - outputs that have not used NEW value
 #
 @final
-class ValueNode:
+class ValueNode(Status):
 
     __value_type: type
     __value: Any
@@ -49,14 +50,13 @@ class ValueNode:
     # POST: value type is set
     # POST: build not complete
     def __init__(self, value_type: type) -> None:
+        super().__init__()
         self.__value_type = value_type
         self.__state = self.State.INVALID
         self.__input = None
         self.__outputs = set()
         self.__waiting_outputs = set()
         self.__build_complete = False
-        self.__add_input_status = self.AddInputStatus.NIL
-        self.__add_output_status = self.AddOutputStatus.NIL
         self.__put_status = self.PutStatus.NIL
         self.__invalidate_status = self.InvalidateStatus.NIL
         self.__used_by_status = self.UsedByStatus.NIL
@@ -72,57 +72,34 @@ class ValueNode:
     # PRE: 'input' is not in input or outputs
     # PRE: this node has no inputs
     # POST: input is set to 'input'
+    @status("OK", "BUILD_COMPLETE", "ALREADY_LINKED", "TOO_MANY_INPUTS")
     def add_input(self, input: "ProcedureNode") -> None:
         if self.__build_complete:
-            self.__add_input_status = self.AddInputStatus.BUILD_COMPLETE
+            self._set_status("add_input", "BUILD_COMPLETE")
             return
         if input in self.__outputs or input is self.__input:
-            self.__add_input_status = self.AddInputStatus.ALREADY_LINKED
+            self._set_status("add_input", "ALREADY_LINKED")
             return
         if self.__input is not None:
-            self.__add_input_status = self.AddInputStatus.TOO_MANY_INPUTS
+            self._set_status("add_input", "TOO_MANY_INPUTS")
             return
         self.__input = input
-        self.__add_input_status = self.AddInputStatus.OK
-
-    class AddInputStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        ALREADY_LINKED = auto(),
-        TOO_MANY_INPUTS = auto(),
-        BUILD_COMPLETE = auto(),
-
-    __add_input_status: AddInputStatus
-
-    def get_add_input_status(self) -> AddInputStatus:
-        return self.__add_input_status
-
+        self._set_status("add_input", "OK")
 
     # add output node
     # PRE: build not complete
     # PRE: 'output' is not in input or outputs
     # POST: 'output' added to output nodes
+    @status("OK", "BUILD_COMPLETE", "ALREADY_LINKED")
     def add_output(self, output: "ProcedureNode") -> None:
         if self.__build_complete:
-            self.__add_output_status = self.AddOutputStatus.BUILD_COMPLETE
+            self._set_status("add_output", "BUILD_COMPLETE")
             return
         if output in self.__outputs or output is self.__input:
-            self.__add_output_status = self.AddOutputStatus.ALREADY_LINKED
+            self._set_status("add_output", "ALREADY_LINKED")
             return
         self.__outputs.add(output)
-        self.__add_output_status = self.AddOutputStatus.OK
-
-    class AddOutputStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        ALREADY_LINKED = auto(),
-        BUILD_COMPLETE = auto(),
-
-    __add_output_status: AddOutputStatus
-
-    def get_add_output_status(self) -> AddOutputStatus:
-        return self.__add_output_status
-
+        self._set_status("add_output", "OK")
 
     # complete build
     # POST: build complete
@@ -400,7 +377,7 @@ class Procedure(ABC):
 #     - procedure
 #
 @final
-class ProcedureNode:
+class ProcedureNode(Status):
 
     __procedure: Procedure
     __inputs: dict[str, ValueNode]
@@ -413,11 +390,11 @@ class ProcedureNode:
     # POST: procedure is set
     # POST: build not complete
     def __init__(self, procedure: Procedure) -> None:
+        super().__init__()
         self.__procedure = procedure
         self.__inputs = dict()
         self.__outputs = dict()
         self.__build_complete = False
-        self.__add_input_status = self.AddInputStatus.NIL
         self.__add_output_status = self.AddOutputStatus.NIL
         self.__invalidate_status = self.InvalidateStatus.NIL
         self.__validate_status = self.ValidateStatus.NIL
@@ -430,30 +407,19 @@ class ProcedureNode:
     # PRE: 'input' is not in inputs or outputs
     # PRE: 'name' is not occupied
     # POST: 'input' added to inputs with 'name'
+    @status("OK", "BUILD_COMPLETE", "ALREADY_LINKED", "DUPLICATE_NAME")
     def add_input(self, name: str, input: ValueNode) -> None:
         if self.__build_complete:
-            self.__add_input_status = self.AddInputStatus.BUILD_COMPLETE
+            self._set_status("add_input", "BUILD_COMPLETE")
             return
         if self.__is_node_linked(input):
-            self.__add_input_status = self.AddInputStatus.ALREADY_LINKED
+            self._set_status("add_input", "ALREADY_LINKED")
             return
         if self.__is_slot_linked(name):
-            self.__add_input_status = self.AddInputStatus.DUPLICATE_NAME
+            self._set_status("add_input", "DUPLICATE_NAME")
             return
         self.__inputs[name] = input
-        self.__add_input_status = self.AddInputStatus.OK
-
-    class AddInputStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        ALREADY_LINKED = auto(),
-        DUPLICATE_NAME = auto(),
-        BUILD_COMPLETE = auto(),
-
-    __add_input_status: AddInputStatus
-
-    def get_add_input_status(self) -> AddInputStatus:
-        return self.__add_input_status
+        self._set_status("add_input", "OK")
 
 
     # add output node
@@ -751,17 +717,15 @@ class Simulator(Procedure):
 
     def __add_input(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
         value.add_output(proc)
-        if value.get_add_output_status() \
-                == ValueNode.AddOutputStatus.ALREADY_LINKED:
+        if value.get_status("add_output") == "ALREADY_LINKED":
             self.__init_status = self.InitStatus.ALREADY_LINKED
             return
-        assert(value.get_add_output_status() == ValueNode.AddOutputStatus.OK)
+        assert(value.get_status("add_output") == "OK")
         proc.add_input(slot_name, value)
-        if proc.get_add_input_status() \
-                == ProcedureNode.AddInputStatus.ALREADY_LINKED:
+        if proc.get_status("add_input") == "ALREADY_LINKED":
             self.__init_status = self.InitStatus.ALREADY_LINKED
             return
-        assert(proc.get_add_input_status() == ProcedureNode.AddInputStatus.OK)
+        assert(proc.get_status("add_input") == "OK")
 
     def __add_output(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
         proc.add_output(slot_name, value)
@@ -771,15 +735,13 @@ class Simulator(Procedure):
             return
         assert(proc.get_add_output_status() == ProcedureNode.AddOutputStatus.OK)
         value.add_input(proc)
-        if value.get_add_input_status() \
-                == ValueNode.AddInputStatus.ALREADY_LINKED:
+        if value.get_status("add_input") == "ALREADY_LINKED":
             self.__init_status = self.InitStatus.ALREADY_LINKED
             return
-        if value.get_add_input_status() \
-                == ValueNode.AddInputStatus.TOO_MANY_INPUTS:
+        if value.get_status("add_input") == "TOO_MANY_INPUTS":
             self.__init_status = self.InitStatus.TOO_MANY_INPUTS
             return
-        assert(value.get_add_input_status() == ValueNode.AddInputStatus.OK)
+        assert(value.get_status("add_input") == "OK")
 
 
     # COMMANDS
