@@ -19,6 +19,10 @@ class StatusMeta(type):
         for name, value in attrs.items():
             if inspect.isfunction(value) and hasattr(value, _METHOD_STATUS_VARS):
                 status_set = getattr(value, _METHOD_STATUS_VARS)
+                if len(status_set) == 0:
+                    for base in bases:
+                        if hasattr(base, name):
+                            status_set = getattr(getattr(base, name), _METHOD_STATUS_VARS)
                 if "NIL" not in status_set:
                     status_set.add("NIL")
                 attrs[_CLASS_STATUS_VARS][name] = status_set
