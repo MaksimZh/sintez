@@ -20,3 +20,6 @@ class Status():
     
     def get_status(self, name: str) -> str:
         return self.__status.get(name, "NIL")
+
+    def _set_status(self, name: str, value: str) -> None:
+        self.__status[name] = value
