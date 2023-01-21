@@ -129,7 +129,7 @@ simulator = Simulator([
             "localization_rate": float,
         }),
 ])
-assert(simulator.get_init_status() == Simulator.InitStatus.OK)
+assert simulator.get_init_status() == Simulator.InitStatus.OK
 simulator.put("temperature", temperature_kelvin)
 simulator.put("angular_params", angular_params)
 simulator.put("impurity_params", impurity_params)
@@ -138,7 +138,7 @@ simulator.put("radial_mesh", radial_mesh)
 simulator.put("x", 0)
 simulator.put("energy", 1)
 print(simulator.get("localization_rate"))
-assert(simulator.get_get_status() == Simulator.GetStatus.OK)
+assert simulator.get_get_status() == Simulator.GetStatus.OK
 
 def calc(energies):
     r = solver.create_radial_mesh(meshParams)

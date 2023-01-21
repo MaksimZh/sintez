@@ -1,7 +1,7 @@
 from typing import Any, Optional, Union, final
 from enum import Enum, auto
-from abc import ABC, abstractmethod
-from mss import Status, status
+from abc import abstractmethod
+from mss import Status, ABCStatus, status
 
 # Nodes implement the calculation scheme logic.
 #
@@ -57,12 +57,6 @@ class ValueNode(Status):
         self.__outputs = set()
         self.__waiting_outputs = set()
         self.__build_complete = False
-        self.__put_status = self.PutStatus.NIL
-        self.__invalidate_status = self.InvalidateStatus.NIL
-        self.__used_by_status = self.UsedByStatus.NIL
-        self.__validate_status = self.ValidateStatus.NIL
-        self.__get_state_status = self.GetStateStatus.NIL
-        self.__get_status = self.GetStatus.NIL
 
 
     # COMMANDS
@@ -115,61 +109,40 @@ class ValueNode(Status):
     # POST: value is set to 'value'
     # POST: send invalidate command to all outputs
     # POST: no outputs used NEW value
+    @status("OK", "BUILD_INCOMPLETE", "INCOMPATIBLE_TYPE")
     def put(self, value: Any) -> None:
         if not self.__build_complete:
-            self.__put_status = self.PutStatus.BUILD_INCOMPLETE
+            self._set_status("put", "BUILD_INCOMPLETE")
             return
         if not _type_fits(type(value), self.__value_type):
-            self.__put_status = self.PutStatus.INCOMPATIBLE_TYPE
+            self._set_status("put", "INCOMPATIBLE_TYPE")
             return
-        self.__put_status = self.PutStatus.OK
+        self._set_status("put", "OK")
         self.__value = value
         self.__state = self.State.REGULAR if len(self.__outputs) == 0 else \
             self.State.NEW
         for output in self.__outputs:
             self.__waiting_outputs.add(output)
             output.invalidate()
-            assert(output.get_invalidate_status() \
-                == ProcedureNode.InvalidateStatus.OK)
-
-    class PutStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-        INCOMPATIBLE_TYPE = auto(),
-
-    __put_status: PutStatus
-
-    def get_put_status(self) -> PutStatus:
-        return self.__put_status
+            assert output.is_status("invalidate", "OK")
 
 
     # invalidate node
     # PRE: build complete
     # POST: state is INVALID
     # POST: if the state has changed then send invalidate command to all outputs
+    @status("OK", "BUILD_INCOMPLETE")
     def invalidate(self) -> None:
         if not self.__build_complete:
-            self.__invalidate_status = self.InvalidateStatus.BUILD_INCOMPLETE
+            self._set_status("invalidate", "BUILD_INCOMPLETE")
             return
-        self.__invalidate_status = self.InvalidateStatus.OK
+        self._set_status("invalidate", "OK")
         if self.__state == self.State.INVALID:
             return
         self.__state = self.State.INVALID
         for output in self.__outputs:
             output.invalidate()
-            assert(output.get_invalidate_status() \
-                == ProcedureNode.InvalidateStatus.OK)
-
-    class InvalidateStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-
-    __invalidate_status: InvalidateStatus
-
-    def get_invalidate_status(self) -> InvalidateStatus:
-        return self.__invalidate_status
+            assert output.is_status("invalidate", "OK")
 
 
     # notify that the value was used by output
@@ -178,66 +151,44 @@ class ValueNode(Status):
     # PRE: state is not INVALID
     # POST: 'output' used new value
     # POST: if all outputs used the value then set state to REGULAR
+    @status("OK", "BUILD_INCOMPLETE", "NOT_OUTPUT", "INVALID_VALUE")
     def used_by(self, output: "ProcedureNode") -> None:
         if not self.__build_complete:
-            self.__used_by_status = self.UsedByStatus.BUILD_INCOMPLETE
+            self._set_status("used_by", "BUILD_INCOMPLETE")
             return
         if output not in self.__outputs:
-            self.__used_by_status = self.UsedByStatus.NOT_OUTPUT
+            self._set_status("used_by", "NOT_OUTPUT")
             return
         if self.__state is self.State.INVALID:
-            self.__used_by_status = self.UsedByStatus.INVALID_VALUE
+            self._set_status("used_by", "INVALID_VALUE")
             return
         self.__waiting_outputs.remove(output)
         if len(self.__waiting_outputs) == 0:
             self.__state = self.State.REGULAR
-        self.__used_by_status = self.UsedByStatus.OK
-
-    class UsedByStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-        NOT_OUTPUT = auto(),
-        INVALID_VALUE = auto(),
-
-    __used_by_status: UsedByStatus
-
-    def get_used_by_status(self) -> UsedByStatus:
-        return self.__used_by_status
+        self._set_status("used_by", "OK")
 
 
     # ensure that the value is valid
     # PRE: build complete
     # PRE: there is input or the state is not INVALID
     # POST: if the state is INVALID then send validate command to input
+    @status("OK", "BUILD_INCOMPLETE", "NO_VALUE_SOURCE", "INPUT_FAILED")
     def validate(self) -> None:
         if not self.__build_complete:
-            self.__validate_status = self.ValidateStatus.BUILD_INCOMPLETE
+            self._set_status("validate", "BUILD_INCOMPLETE")
             return
         if self.__state != self.State.INVALID:
-            self.__validate_status = self.ValidateStatus.OK
+            self._set_status("validate", "OK")
             return
         if self.__input is None:
-            self.__validate_status = self.ValidateStatus.NO_VALUE_SOURCE
+            self._set_status("validate", "NO_VALUE_SOURCE")
             return
-        assert(self.__input)
+        assert self.__input
         self.__input.validate()
-        if self.__input.get_validate_status() != ProcedureNode.ValidateStatus.OK:
-            self.__validate_status = self.ValidateStatus.INPUT_FAILED
+        if not self.__input.is_status("validate", "OK"):
+            self._set_status("validate", "INPUT_FAILED")
             return
-        self.__validate_status = self.ValidateStatus.OK
-
-    class ValidateStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-        NO_VALUE_SOURCE = auto(),
-        INPUT_FAILED = auto(),
-
-    __validate_status: ValidateStatus
-
-    def get_validate_status(self) -> ValidateStatus:
-        return self.__validate_status
+        self._set_status("validate", "OK")
 
 
     # QUERIES
@@ -262,64 +213,40 @@ class ValueNode(Status):
 
     # get node state
     # PRE: build complete
+    @status("OK", "BUILD_INCOMPLETE")
     def get_state(self) -> State:
         if not self.__build_complete:
-            self.__get_state_status = self.GetStateStatus.BUILD_INCOMPLETE
+            self._set_status("get_state", "BUILD_INCOMPLETE")
             return self.State.INVALID
-        self.__get_state_status = self.GetStateStatus.OK
+        self._set_status("get_state", "OK")
         return self.__state
-
-    class GetStateStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-
-    __get_state_status: GetStateStatus
-
-    def get_get_state_status(self) -> GetStateStatus:
-        return self.__get_state_status
 
 
     # get value
     # PRE: build complete
     # PRE: state is not INVALID
+    @status("OK", "BUILD_INCOMPLETE", "INVALID_VALUE")
     def get(self) -> Any:
         if not self.__build_complete:
-            self.__get_status = self.GetStatus.BUILD_INCOMPLETE
+            self._set_status("get", "BUILD_INCOMPLETE")
             return None
         if self.__state == self.State.INVALID:
-            self.__get_status = self.GetStatus.INVALID_VALUE
+            self._set_status("get", "INVALID_VALUE")
             return None
-        self.__get_status = self.GetStatus.OK
+        self._set_status("get", "OK")
         return self.__value
-
-    class GetStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-        INVALID_VALUE = auto(),
-
-    __get_status: GetStatus
-
-    def get_get_status(self) -> GetStatus:
-        return self.__get_status
 
 
 # Base class for the internal procedure of ProcedureNode
 # 
 # When the user gets any output value it must be up to date with input values.
-# Procedure implementation must take care of the (protected) status fields.
+# Procedure implementation must take care of the method statuses.
 #
 # Contains:
 #     - named and typed input values
 #     - named output values 
 #
-class Procedure(ABC):
-
-    def __init__(self) -> None:
-        self._put_status = self.PutStatus.NIL
-        self._get_status = self.GetStatus.NIL
-
+class Procedure(ABCStatus):
 
     # COMMANDS
     
@@ -328,21 +255,9 @@ class Procedure(ABC):
     # PRE: value type is compatible
     # POST: input value is set
     @abstractmethod
+    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
     def put(self, name: str, value: Any) -> None:
         pass
-
-    class PutStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        INVALID_NAME = auto(),
-        INCOMPATIBLE_TYPE = auto(),
-        INTERNAL_ERROR = auto(),
-
-    _put_status: PutStatus
-
-    @final
-    def get_put_status(self) -> PutStatus:
-        return self._put_status
 
 
     # QUERIES
@@ -351,21 +266,9 @@ class Procedure(ABC):
     # PRE: name is acceptable
     # PRE: there is enough data to calculate value
     @abstractmethod
+    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT", "INTERNAL_ERROR")
     def get(self, name: str) -> Any:
         pass
-
-    class GetStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        INVALID_NAME = auto(),
-        INCOMPLETE_INPUT = auto(),
-        INTERNAL_ERROR = auto(),
-
-    _get_status: GetStatus
-
-    @final
-    def get_get_status(self) -> GetStatus:
-        return self._get_status
 
 
 # Implements procedure node part of calculation scheme logic.
@@ -395,9 +298,6 @@ class ProcedureNode(Status):
         self.__inputs = dict()
         self.__outputs = dict()
         self.__build_complete = False
-        self.__add_output_status = self.AddOutputStatus.NIL
-        self.__invalidate_status = self.InvalidateStatus.NIL
-        self.__validate_status = self.ValidateStatus.NIL
 
 
     # COMMANDS
@@ -427,30 +327,19 @@ class ProcedureNode(Status):
     # PRE: 'output' is not in inputs or outputs
     # PRE: 'name' is not occupied
     # POST: 'output' added to outputs with 'name'
+    @status("OK", "ALREADY_LINKED", "DUPLICATE_NAME", "BUILD_COMPLETE")
     def add_output(self, name: str, output: ValueNode) -> None:
         if self.__build_complete:
-            self.__add_output_status = self.AddOutputStatus.BUILD_COMPLETE
+            self._set_status("add_output", "BUILD_COMPLETE")
             return
         if self.__is_node_linked(output):
-            self.__add_output_status = self.AddOutputStatus.ALREADY_LINKED
+            self._set_status("add_output", "ALREADY_LINKED")
             return
         if self.__is_slot_linked(name):
-            self.__add_output_status = self.AddOutputStatus.DUPLICATE_NAME
+            self._set_status("add_output", "DUPLICATE_NAME")
             return
         self.__outputs[name] = output
-        self.__add_output_status = self.AddOutputStatus.OK
-
-    class AddOutputStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        ALREADY_LINKED = auto(),
-        DUPLICATE_NAME = auto(),
-        BUILD_COMPLETE = auto(),
-
-    __add_output_status: AddOutputStatus
-
-    def get_add_output_status(self) -> AddOutputStatus:
-        return self.__add_output_status
+        self._set_status("add_output", "OK")
 
 
     # complete build
@@ -462,25 +351,15 @@ class ProcedureNode(Status):
     # signal that input state changed to NEW or INVALID
     # PRE: build complete
     # POST: all outputs get invalidate command
+    @status("OK", "BUILD_INCOMPLETE")
     def invalidate(self) -> None:
         if not self.__build_complete:
-            self.__invalidate_status = self.InvalidateStatus.BUILD_INCOMPLETE
+            self._set_status("invalidate", "BUILD_INCOMPLETE")
             return
-        self.__invalidate_status = self.InvalidateStatus.OK
+        self._set_status("invalidate", "OK")
         for output in self.__outputs.values():
             output.invalidate()
-            assert(output.get_invalidate_status() \
-                == ValueNode.InvalidateStatus.OK)
-
-    class InvalidateStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-
-    __invalidate_status: InvalidateStatus
-
-    def get_invalidate_status(self) -> InvalidateStatus:
-        return self.__invalidate_status
+            assert output.is_status("invalidate", "OK")
 
 
     # run the procedure
@@ -490,52 +369,41 @@ class ProcedureNode(Status):
     # POST: all inputs have been validated
     # POST: inputs in NEW state were sent to procedure with set command
     # POST: all outputs have been updated using procedure get query
+    @status("OK", "BUILD_INCOMPLETE", "INPUT_VALIDATION_FAILED", "FAIL")
     def validate(self) -> None:
         if not self.__build_complete:
-            self.__validate_status = self.ValidateStatus.BUILD_INCOMPLETE
+            self._set_status("validate", "BUILD_INCOMPLETE")
             return
         for input in self.__inputs.values():
             input.validate()
-            if input.get_validate_status() != ValueNode.ValidateStatus.OK:
-                self.__validate_status = self.ValidateStatus.INPUT_VALIDATION_FAILED
+            if not input.is_status("validate", "OK"):
+                self._set_status("validate", "INPUT_VALIDATION_FAILED")
                 return
         for name, input in self.__inputs.items():
             state = input.get_state()
-            assert(input.get_get_state_status() == ValueNode.GetStateStatus.OK)
+            assert input.is_status("get_state", "OK")
             if state == ValueNode.State.REGULAR:
                 continue
-            assert(state == ValueNode.State.NEW)
+            assert state == ValueNode.State.NEW
             value = input.get()
-            assert(input.get_get_status() == ValueNode.GetStatus.OK)
+            assert input.is_status("get", "OK")
             self.__procedure.put(name, value)
-            if self.__procedure.get_put_status() != Procedure.PutStatus.OK:
-                self.__validate_status = self.ValidateStatus.FAIL
+            if not self.__procedure.is_status("put", "OK"):
+                self._set_status("validate", "FAIL")
                 return
         for name, output in self.__outputs.items():
             value = self.__procedure.get(name)
-            if self.__procedure.get_get_status() != Procedure.GetStatus.OK:
-                self.__validate_status = self.ValidateStatus.FAIL
+            if not self.__procedure.is_status("get", "OK"):
+                self._set_status("validate", "FAIL")
                 return
             output.put(value)
-            if output.get_put_status() != ValueNode.PutStatus.OK:
-                self.__validate_status = self.ValidateStatus.FAIL
+            if not output.is_status("put", "OK"):
+                self._set_status("validate", "FAIL")
                 return
-        self.__validate_status = self.ValidateStatus.OK
+        self._set_status("validate", "OK")
         for input in self.__inputs.values():
             input.used_by(self)
-            assert(input.get_used_by_status() == ValueNode.UsedByStatus.OK)
-
-    class ValidateStatus(Enum):
-        NIL = auto(),
-        OK = auto(),
-        BUILD_INCOMPLETE = auto(),
-        INPUT_VALIDATION_FAILED = auto(),
-        FAIL = auto(),
-
-    __validate_status: ValidateStatus
-
-    def get_validate_status(self) -> ValidateStatus:
-        return self.__validate_status
+            assert input.is_status("used_by", "OK")
 
 
     # QUERIES
@@ -667,7 +535,7 @@ class Simulator(Procedure):
                 if self.__init_status != self.InitStatus.NIL:
                     return
             else:
-                assert(type(value_link) is str)
+                assert type(value_link) is str
                 value_name: str = value_link
             if value_name not in self.__values:
                 self.__init_status = self.InitStatus.NAME_NOT_FOUND
@@ -687,7 +555,7 @@ class Simulator(Procedure):
                 if self.__init_status != self.InitStatus.NIL:
                     return
             else:
-                assert(type(value_link) is str)
+                assert type(value_link) is str
                 value_name: str = value_link
             if value_name not in self.__values:
                 self.__init_status = self.InitStatus.NAME_NOT_FOUND
@@ -704,11 +572,11 @@ class Simulator(Procedure):
 
     def __add_auto_value(self, name: str, value_type: type) -> None:
         if name not in self.__values:
-            assert(name not in self.__auto_value_types)
+            assert name not in self.__auto_value_types
             self.__auto_value_types[name] = value_type
             self.__values[name] = ValueNode(value_type)
             return
-        assert(name in self.__auto_value_types)
+        assert name in self.__auto_value_types
         if self.__auto_value_types[name] is not value_type:
             self.__init_status = self.InitStatus.AUTO_VALUE_TYPE_MISMATCH
             self.__init_message = \
@@ -720,20 +588,19 @@ class Simulator(Procedure):
         if value.get_status("add_output") == "ALREADY_LINKED":
             self.__init_status = self.InitStatus.ALREADY_LINKED
             return
-        assert(value.get_status("add_output") == "OK")
+        assert value.get_status("add_output") == "OK"
         proc.add_input(slot_name, value)
         if proc.get_status("add_input") == "ALREADY_LINKED":
             self.__init_status = self.InitStatus.ALREADY_LINKED
             return
-        assert(proc.get_status("add_input") == "OK")
+        assert proc.get_status("add_input") == "OK"
 
     def __add_output(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
         proc.add_output(slot_name, value)
-        if proc.get_add_output_status() \
-                == ProcedureNode.AddOutputStatus.ALREADY_LINKED:
+        if proc.is_status("add_output", "ALREADY_LINKED"):
             self.__init_status = self.InitStatus.ALREADY_LINKED
             return
-        assert(proc.get_add_output_status() == ProcedureNode.AddOutputStatus.OK)
+        assert proc.is_status("add_output", "OK")
         value.add_input(proc)
         if value.get_status("add_input") == "ALREADY_LINKED":
             self.__init_status = self.InitStatus.ALREADY_LINKED
@@ -741,45 +608,47 @@ class Simulator(Procedure):
         if value.get_status("add_input") == "TOO_MANY_INPUTS":
             self.__init_status = self.InitStatus.TOO_MANY_INPUTS
             return
-        assert(value.get_status("add_input") == "OK")
+        assert value.get_status("add_input") == "OK"
 
 
     # COMMANDS
 
     @final
+    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
     def put(self, name: str, value: Any) -> None:
         if self.get_init_status() != self.InitStatus.OK:
-            self._put_status = self.PutStatus.INTERNAL_ERROR
+            self._set_status("put", "INTERNAL_ERROR")
             return
         if name not in self.__values:
-            self._put_status = self.PutStatus.INVALID_NAME
+            self._set_status("put", "INVALID_NAME")
             return
         if self.__values[name].get_input() is not None:
-            self._put_status = self.PutStatus.INVALID_NAME
+            self._set_status("put", "INVALID_NAME")
             return
         self.__values[name].put(value)
-        assert(self.__values[name].get_put_status() == ValueNode.PutStatus.OK)
-        self._put_status = self.PutStatus.OK
+        assert self.__values[name].is_status("put", "OK")
+        self._set_status("put", "OK")
 
 
     # QUERIES
 
     @final
+    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
     def get(self, name: str) -> Any:
         if self.get_init_status() != self.InitStatus.OK:
-            self._get_status = self.GetStatus.INTERNAL_ERROR
+            self._set_status("get", "INTERNAL_ERROR")
             return
         if name not in self.__values:
-            self._get_status = self.GetStatus.INVALID_NAME
+            self._set_status("get", "INVALID_NAME")
             return
         node = self.__values[name]
         node.validate()
-        if node.get_validate_status() != ValueNode.ValidateStatus.OK:
-            self._get_status = self.GetStatus.INCOMPLETE_INPUT
+        if node.is_status("validate", "OK"):
+            self._set_status("get", "INCOMPLETE_INPUT")
             return None
         value = node.get()
-        assert(node.get_get_status() == ValueNode.GetStatus.OK)
-        self._get_status = self.GetStatus.OK
+        assert node.is_status("get", "OK")
+        self._set_status("get", "OK")
         return value
 
 
