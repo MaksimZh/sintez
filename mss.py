@@ -31,6 +31,7 @@ class StatusMeta(type):
                             status_name = getattr(value, _METHOD_STATUS_NAME, name)
                 if "NIL" not in status_set:
                     status_set.add("NIL")
+                setattr(value, _METHOD_STATUS_VARS, status_set)
                 attrs[_CLASS_STATUS_VARS][status_name] = status_set
         return super().__new__(cls, class_name, bases, attrs)
 
