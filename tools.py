@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, final
 from abc import ABC
 
 _STATUSES = "__tools_statuses"
@@ -24,8 +24,10 @@ class Status(ABC):
     def __init__(self) -> None:
         self.__status = dict()
     
+    @final
     def get_status(self, name: str) -> str:
         return self.__status.get(name, "NIL")
 
+    @final
     def _set_status(self, name: str, value: str) -> None:
         self.__status[name] = value
