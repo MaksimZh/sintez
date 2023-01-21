@@ -1,4 +1,5 @@
 from typing import Any, Callable
+from abc import ABC
 
 _STATUSES = "__tools_statuses"
 
@@ -11,9 +12,14 @@ def status(*args: str) -> Callable[[AnyFunc], AnyFunc]:
     return decorator
 
 
-class Status():
+class Status(ABC):
 
     __status: dict[str, str]
+
+    def __new__(cls: type["Status"]) -> "Status":
+        if cls is Status:
+            raise TypeError(f"only children of '{cls.__name__}' may be instantiated")
+        return super().__new__(cls)
 
     def __init__(self) -> None:
         self.__status = dict()

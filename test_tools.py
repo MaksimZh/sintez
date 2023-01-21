@@ -24,6 +24,10 @@ class Test_Status(unittest.TestCase):
         self.assertEqual(foo2.get_status("func"), "OK")
         self.assertEqual(foo.get_status("func"), "ERR")
 
+    
+    def test_instance(self):
+        self.assertRaises(TypeError, Status)
+
 
 if __name__ == "__main__":
     unittest.main()
