@@ -11,5 +11,12 @@ def status(*args: str) -> Callable[[AnyFunc], AnyFunc]:
     return decorator
 
 
-class Status:
-    pass
+class Status():
+
+    __status: dict[str, str]
+
+    def __init__(self) -> None:
+        self.__status = dict()
+    
+    def get_status(self, name: str) -> str:
+        return self.__status.get(name, "NIL")
