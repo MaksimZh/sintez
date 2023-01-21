@@ -2,13 +2,17 @@ from typing import Any, Callable
 import inspect
 from abc import ABC, ABCMeta
 
+_METHOD_STATUS_NAME = "__mss_method_status_name"
 _METHOD_STATUS_VARS = "__mss_method_status_vars"
 _CLASS_STATUS_VARS = "__mss_class_status_vars"
 
 
-def status(*args: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def status(*args: str, **kwargs: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    assert len(set(kwargs.keys()).difference({"name"})) == 0
     def _status(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, _METHOD_STATUS_VARS, set(args))
+        if "name" in kwargs:
+            setattr(func, _METHOD_STATUS_NAME, kwargs["name"])
         return func
     return _status
 
@@ -19,13 +23,15 @@ class StatusMeta(type):
         for name, value in attrs.items():
             if inspect.isfunction(value) and hasattr(value, _METHOD_STATUS_VARS):
                 status_set = getattr(value, _METHOD_STATUS_VARS)
+                status_name = getattr(value, _METHOD_STATUS_NAME, name)
                 if len(status_set) == 0:
                     for base in bases:
                         if hasattr(base, name):
                             status_set = getattr(getattr(base, name), _METHOD_STATUS_VARS)
+                            status_name = getattr(value, _METHOD_STATUS_NAME, name)
                 if "NIL" not in status_set:
                     status_set.add("NIL")
-                attrs[_CLASS_STATUS_VARS][name] = status_set
+                attrs[_CLASS_STATUS_VARS][status_name] = status_set
         return super().__new__(cls, class_name, bases, attrs)
 
 

@@ -514,7 +514,7 @@ class Test_Simulator(unittest.TestCase):
         s = Simulator([
             ("a", int),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
@@ -526,7 +526,7 @@ class Test_Simulator(unittest.TestCase):
                 {"left": "a", "right": "b"},
                 {"quotient": "c", "remainder": "d"}),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
@@ -543,7 +543,7 @@ class Test_Simulator(unittest.TestCase):
             ("e", int),
             ("f", int),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
@@ -556,21 +556,21 @@ class Test_Simulator(unittest.TestCase):
                 {"left": "c", "right": "d"},
                 {"quotient": int, "remainder": int}),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
             (BlackHole(), {"foo": int}, {}),
             (BlackHole(), {"foo": int}, {}),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
             (BlackHole(), {"foo": int}, {}),
             (BlackHole(), {}, {"foo": int}),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertEqual(s.get_init_message(), "")
 
         s = Simulator([
@@ -578,7 +578,7 @@ class Test_Simulator(unittest.TestCase):
             ("b", int),
             ("a", str),
         ])
-        self.assertTrue(s.is_status("__init__", "DUPLICATE_NAME"))
+        self.assertTrue(s.is_status("init", "DUPLICATE_NAME"))
         self.assertEqual(s.get_init_message(), "Duplicate name: 'a'")
 
         s = Simulator([
@@ -587,7 +587,7 @@ class Test_Simulator(unittest.TestCase):
                 {"left": "c"},
                 {}),
         ])
-        self.assertTrue(s.is_status("__init__", "NAME_NOT_FOUND"))
+        self.assertTrue(s.is_status("init", "NAME_NOT_FOUND"))
         self.assertEqual(s.get_init_message(), "Input not found: 'left': 'c'")
 
         s = Simulator([
@@ -596,7 +596,7 @@ class Test_Simulator(unittest.TestCase):
                 {},
                 {"left": "c"}),
         ])
-        self.assertTrue(s.is_status("__init__", "NAME_NOT_FOUND"))
+        self.assertTrue(s.is_status("init", "NAME_NOT_FOUND"))
         self.assertEqual(s.get_init_message(), "Output not found: 'left': 'c'")
 
         s = Simulator([
@@ -605,7 +605,7 @@ class Test_Simulator(unittest.TestCase):
                 {"foo": "a", "boo": "a"},
                 {}),
         ])
-        self.assertTrue(s.is_status("__init__", "ALREADY_LINKED"))
+        self.assertTrue(s.is_status("init", "ALREADY_LINKED"))
         self.assertEqual(s.get_init_message(), "Already linked: 'boo': 'a'")
 
         s = Simulator([
@@ -614,7 +614,7 @@ class Test_Simulator(unittest.TestCase):
                 {"foo": "a"},
                 {"boo": "a"}),
         ])
-        self.assertTrue(s.is_status("__init__", "ALREADY_LINKED"))
+        self.assertTrue(s.is_status("init", "ALREADY_LINKED"))
         self.assertEqual(s.get_init_message(), "Already linked: 'boo': 'a'")
 
         s = Simulator([
@@ -623,7 +623,7 @@ class Test_Simulator(unittest.TestCase):
                 {},
                 {"foo": "a", "boo": "a"}),
         ])
-        self.assertTrue(s.is_status("__init__", "ALREADY_LINKED"))
+        self.assertTrue(s.is_status("init", "ALREADY_LINKED"))
         self.assertEqual(s.get_init_message(), "Already linked: 'boo': 'a'")
 
         s = Simulator([
@@ -631,21 +631,21 @@ class Test_Simulator(unittest.TestCase):
             (BlackHole(), {}, {"foo": "a"}),
             (BlackHole(), {}, {"foo": "a"}),
         ])
-        self.assertTrue(s.is_status("__init__", "TOO_MANY_INPUTS"))
+        self.assertTrue(s.is_status("init", "TOO_MANY_INPUTS"))
         self.assertEqual(s.get_init_message(), "Too many inputs: 'foo': 'a'")
 
         s = Simulator([
             (BlackHole(), {"foo": int}, {}),
             (BlackHole(), {"foo": str}, {}),
         ])
-        self.assertTrue(s.is_status("__init__", "AUTO_VALUE_TYPE_MISMATCH"))
+        self.assertTrue(s.is_status("init", "AUTO_VALUE_TYPE_MISMATCH"))
         self.assertEqual(s.get_init_message(),
             "Auto value 'foo' type mismatch: <class 'str'> and <class 'int'>")
 
 
     def test_put(self):
         s = Simulator([("a", int), ("a", int)])
-        self.assertTrue(s.is_status("__init__", "DUPLICATE_NAME"))
+        self.assertTrue(s.is_status("init", "DUPLICATE_NAME"))
         self.assertTrue(s.is_status("put", "NIL"))
         s.put("a", 1)
         self.assertTrue(s.is_status("put", "INTERNAL_ERROR"))
@@ -664,7 +664,7 @@ class Test_Simulator(unittest.TestCase):
             ("e", int),
             ("f", int),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertTrue(s.is_status("put", "NIL"))
         s.put("a", 1)
         self.assertTrue(s.is_status("put", "OK"))
@@ -676,7 +676,7 @@ class Test_Simulator(unittest.TestCase):
 
     def test_get(self):
         s = Simulator([("a", int), ("a", int)])
-        self.assertTrue(s.is_status("__init__", "DUPLICATE_NAME"))
+        self.assertTrue(s.is_status("init", "DUPLICATE_NAME"))
         self.assertTrue(s.is_status("get", "NIL"))
         s.get("a")
         self.assertTrue(s.is_status("get", "INTERNAL_ERROR"))
@@ -695,7 +695,7 @@ class Test_Simulator(unittest.TestCase):
             ("e", int),
             ("f", int),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         self.assertTrue(s.is_status("get", "NIL"))
         s.get("foo")
         self.assertTrue(s.is_status("get", "INVALID_NAME"))
@@ -733,7 +733,7 @@ class Test_Simulator(unittest.TestCase):
             ("c", int),
             ("d", int),
         ])
-        self.assertTrue(s.is_status("__init__", "OK"))
+        self.assertTrue(s.is_status("init", "OK"))
         s.put("a", 101)
         s.put("b", 7)
         self.assertEqual(s.get("c"), 4)

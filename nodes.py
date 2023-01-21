@@ -464,6 +464,7 @@ class Simulator(Procedure):
         "ALREADY_LINKED",
         "TOO_MANY_INPUTS",
         "AUTO_VALUE_TYPE_MISMATCH",
+        name="init",
     )
     def __init__(self, node_patterns: list[NodePattern]) -> None:
         super().__init__()
@@ -479,16 +480,16 @@ class Simulator(Procedure):
                     proc_patterns.append(pattern)
 
         self.__init_values(value_patterns)
-        if not self.is_status("__init__", "NIL"):
+        if not self.is_status("init", "NIL"):
             return
         self.__init_procs(proc_patterns)
-        if not self.is_status("__init__", "NIL"):
+        if not self.is_status("init", "NIL"):
             return
         for value in self.__values.values():
             value.complete_build()
         for proc in self.__procs:
             proc.complete_build()
-        self._set_status("__init__", "OK")
+        self._set_status("init", "OK")
     __init_message: str
 
     @final
@@ -500,7 +501,7 @@ class Simulator(Procedure):
         self.__values = dict()
         for name, value_type in patterns:
             if name in self.__values:
-                self._set_status("__init__", "DUPLICATE_NAME")
+                self._set_status("init", "DUPLICATE_NAME")
                 self.__init_message = f"Duplicate name: '{name}'"
                 return
             self.__values[name] = ValueNode(value_type)
@@ -531,12 +532,12 @@ class Simulator(Procedure):
                 assert type(value_link) is str
                 value_name: str = value_link
             if value_name not in self.__values:
-                self._set_status("__init__", "NAME_NOT_FOUND")
+                self._set_status("init", "NAME_NOT_FOUND")
                 self.__init_message = f"Input not found: '{slot_name}': '{value_name}'"
                 return
             value = self.__values[value_name]
             self.__add_input(proc, slot_name, value)
-            if self.is_status("__init__", "ALREADY_LINKED"):
+            if self.is_status("init", "ALREADY_LINKED"):
                 self.__init_message = f"Already linked: '{slot_name}': '{value_name}'"
                 return
 
@@ -551,15 +552,15 @@ class Simulator(Procedure):
                 assert type(value_link) is str
                 value_name: str = value_link
             if value_name not in self.__values:
-                self._set_status("__init__", "NAME_NOT_FOUND")
+                self._set_status("init", "NAME_NOT_FOUND")
                 self.__init_message = f"Output not found: '{slot_name}': '{value_name}'"
                 return
             value = self.__values[value_name]
             self.__add_output(proc, slot_name, value)
-            if self.is_status("__init__", "ALREADY_LINKED"):
+            if self.is_status("init", "ALREADY_LINKED"):
                 self.__init_message = f"Already linked: '{slot_name}': '{value_name}'"
                 return
-            if self.is_status("__init__", "TOO_MANY_INPUTS"):
+            if self.is_status("init", "TOO_MANY_INPUTS"):
                 self.__init_message = f"Too many inputs: '{slot_name}': '{value_name}'"
                 return
 
@@ -571,7 +572,7 @@ class Simulator(Procedure):
             return
         assert name in self.__auto_value_types
         if self.__auto_value_types[name] is not value_type:
-            self._set_status("__init__", "AUTO_VALUE_TYPE_MISMATCH")
+            self._set_status("init", "AUTO_VALUE_TYPE_MISMATCH")
             self.__init_message = \
                 f"Auto value '{name}' type mismatch:" + \
                     f" {str(value_type)} and {str(self.__auto_value_types[name])}"
@@ -579,27 +580,27 @@ class Simulator(Procedure):
     def __add_input(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
         value.add_output(proc)
         if value.get_status("add_output") == "ALREADY_LINKED":
-            self._set_status("__init__", "ALREADY_LINKED")
+            self._set_status("init", "ALREADY_LINKED")
             return
         assert value.get_status("add_output") == "OK"
         proc.add_input(slot_name, value)
         if proc.get_status("add_input") == "ALREADY_LINKED":
-            self._set_status("__init__", "ALREADY_LINKED")
+            self._set_status("init", "ALREADY_LINKED")
             return
         assert proc.get_status("add_input") == "OK"
 
     def __add_output(self, proc: ProcedureNode, slot_name: str, value: ValueNode) -> None:
         proc.add_output(slot_name, value)
         if proc.is_status("add_output", "ALREADY_LINKED"):
-            self._set_status("__init__", "ALREADY_LINKED")
+            self._set_status("init", "ALREADY_LINKED")
             return
         assert proc.is_status("add_output", "OK")
         value.add_input(proc)
         if value.get_status("add_input") == "ALREADY_LINKED":
-            self._set_status("__init__", "ALREADY_LINKED")
+            self._set_status("init", "ALREADY_LINKED")
             return
         if value.get_status("add_input") == "TOO_MANY_INPUTS":
-            self._set_status("__init__", "TOO_MANY_INPUTS")
+            self._set_status("init", "TOO_MANY_INPUTS")
             return
         assert value.get_status("add_input") == "OK"
 
@@ -609,7 +610,7 @@ class Simulator(Procedure):
     @final
     @status()
     def put(self, name: str, value: Any) -> None:
-        if not self.is_status("__init__", "OK"):
+        if not self.is_status("init", "OK"):
             self._set_status("put", "INTERNAL_ERROR")
             return
         if name not in self.__values:
@@ -628,7 +629,7 @@ class Simulator(Procedure):
     @final
     @status()
     def get(self, name: str) -> Any:
-        if not self.is_status("__init__", "OK"):
+        if not self.is_status("init", "OK"):
             self._set_status("get", "INTERNAL_ERROR")
             return
         if name not in self.__values:
