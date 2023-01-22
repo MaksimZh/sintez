@@ -1,4 +1,4 @@
-from typing import Any, Callable, final
+from typing import Any, Callable, final, Optional
 from abc import ABC, ABCMeta
 
 _METHOD_STATUS_NAME = "__method_status_name"
@@ -12,18 +12,26 @@ AnyFunc = Callable[..., Any]
 # Note that if 'NIL' value is not listed it will be added automatically.
 #
 # Usage:
-#    class Name(Status):
+#    # method with status 'method' that can have values 'VAL1' and 'VAL2'
+#    @status("VAL1", "VAL2")
+#    def method(self):
 #        ...
 #
-#        # method with status 'method' that can have values 'VAL1' and 'VAL2'
-#        @status("VAL1", "VAL2")
-#        def method(self):
-#            ...
+#    # method with status 'alt_name' that can have values 'VAL3' and 'VAL4'
+#    @status("VAL3", "VAL4", name="alt_name")
+#    def method2(self):
+#        ...
 #
-#        # method with status 'alt_name' that can have values 'VAL3' and 'VAL4'
-#        @status("VAL3", "VAL4", name="alt_name")
-#        def method2(self):
-#            ...
+#    # method with same status and values that in parent class
+#    @status()
+#    def method3(self):
+#        ...
+#
+#    # method with same status and values that in parent class
+#    # parent class must have 'some_name' status
+#    @status(name="some_name")
+#    def method4(self):
+#        ...
 #
 def status(*args: str, **kwargs: str) -> Callable[[AnyFunc], AnyFunc]:
     assert len(set(kwargs.keys()).difference(set(["name"]))) == 0, \
@@ -50,7 +58,16 @@ class StatusMeta(ABCMeta):
                 status_name = getattr(item, _METHOD_STATUS_NAME)
                 if status_name == "":
                     status_name = name
+                parent_status_values = _find_status_values(status_name, bases)
                 status_values = getattr(item, _METHOD_STATUSES)
+                if parent_status_values is None:
+                    assert len(status_values) > 0, \
+                        f"No values provided for '{status_name}' status of {class_name}"
+                if parent_status_values is not None:
+                    assert len(status_values) == 0 \
+                        or status_values == parent_status_values, \
+                        f"Values for '{status_name}' status changed in child class {class_name}"
+                    status_values = parent_status_values
                 if "NIL" not in status_values:
                     status_values.add("NIL")
                 assert status_name not in namespace[_CLASS_STATUSES], \
@@ -140,3 +157,13 @@ class Status(ABC, metaclass=StatusMeta):
 
     def __no_status_value_message(self, name: str, value: str) -> str:
         return f"No '{value}' value for '{name}' status of {self.__class__.__name__}"
+
+
+def _find_status_values(name: str, classes: tuple[type, ...]) -> Optional[set[str]]:
+    for c in classes:
+        if not issubclass(c, Status):
+            continue
+        statuses = getattr(c, _CLASS_STATUSES)
+        if name in statuses:
+            return statuses[name]
+    return None

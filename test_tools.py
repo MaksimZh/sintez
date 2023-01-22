@@ -106,5 +106,93 @@ class Test_Status(unittest.TestCase):
         self.assertTrue(str(ae.exception), "Duplicate status 'alt' in Boo")
 
 
+    def test_no_values(self):
+        with self.assertRaises(AssertionError) as ae:
+            class Foo(Status):
+                @status()
+                def stat(self) -> None:
+                    pass
+            Foo()
+        self.assertEqual(str(ae.exception),
+            "No values provided for 'stat' status of Foo")
+        
+        with self.assertRaises(AssertionError) as ae:
+            class Boo(Status):
+                @status(name="alt")
+                def stat(self) -> None:
+                    pass
+            Boo()
+        self.assertEqual(str(ae.exception),
+            "No values provided for 'alt' status of Boo")
+
+
+    def test_inherited(self):
+        class Grand(Status):
+            @status("OK", "ERR")
+            def stat(self, s: str) -> None:
+                self._set_status("stat", s)
+
+            @status("OK2", "ERR2", name="alt")
+            def stat2(self, s: str) -> None:
+                self._set_status("alt", s)
+
+            def no_stat(self, s: str) -> None:
+                self._set_status("no_stat", s)
+
+        class Parent(Grand):
+            @status()
+            def stat(self, s: str) -> None:
+                self._set_status("stat", s)
+
+            @status(name="alt")
+            def stat2(self, s: str) -> None:
+                self._set_status("alt", s)
+
+            def no_stat(self, s: str) -> None:
+                self._set_status("no_stat", s)
+
+        class Child(Parent):
+            @status()
+            def stat(self, s: str) -> None:
+                self._set_status("stat", s)
+
+            @status(name="alt")
+            def stat2(self, s: str) -> None:
+                self._set_status("alt", s)
+
+            def no_stat(self, s: str) -> None:
+                self._set_status("no_stat", s)
+
+        with self.assertRaises(AssertionError) as ae:
+            class Bad(Parent):
+                @status("FOO")
+                def stat(self, s: str) -> None:
+                    self._set_status("stat", s)
+            Bad()
+        self.assertEqual(str(ae.exception),
+            "Values for 'stat' status changed in child class Bad")
+
+        for Foo in [Grand, Parent, Child]:
+            foo = Foo()
+            self.assertTrue(foo.is_status("stat", "NIL"))
+            self.assertTrue(foo.is_status("alt", "NIL"))
+            with self.assertRaises(AssertionError) as ae:
+                foo.is_status("no_stat", "NIL")
+            self.assertEqual(str(ae.exception),
+                f"No 'no_stat' status for {Foo.__name__}")
+            with self.assertRaises(AssertionError) as ae:
+                foo.is_status("stat", "FOO")
+            self.assertEqual(str(ae.exception),
+                f"No 'FOO' value for 'stat' status of {Foo.__name__}")
+            foo.stat("OK")
+            self.assertTrue(foo.is_status("stat", "OK"))
+            foo.stat("ERR")
+            self.assertTrue(foo.is_status("stat", "ERR"))
+            foo.stat2("OK2")
+            self.assertTrue(foo.is_status("alt", "OK2"))
+            foo.stat2("ERR2")
+            self.assertTrue(foo.is_status("alt", "ERR2"))
+
+
 if __name__ == "__main__":
     unittest.main()
