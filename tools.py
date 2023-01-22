@@ -1,6 +1,7 @@
 from typing import Any, Callable, final
 from abc import ABC, ABCMeta
 
+_METHOD_STATUS_NAME = "__method_status_name"
 _METHOD_STATUSES = "__method_statuses"
 _CLASS_STATUSES = "__class_statuses"
 
@@ -13,13 +14,24 @@ AnyFunc = Callable[..., Any]
 # Usage:
 #    class Name(Status):
 #        ...
+#
+#        # method with status 'method' that can have values 'VAL1' and 'VAL2'
 #        @status("VAL1", "VAL2")
 #        def method(self):
 #            ...
 #
-def status(*args: str) -> Callable[[AnyFunc], AnyFunc]:
+#        # method with status 'alt_name' that can have values 'VAL3' and 'VAL4'
+#        @status("VAL3", "VAL4", name="alt_name")
+#        def method2(self):
+#            ...
+#
+def status(*args: str, **kwargs: str) -> Callable[[AnyFunc], AnyFunc]:
+    assert len(set(kwargs.keys()).difference(set(["name"]))) == 0, \
+        f"Only 'name' keyword argument accepted"
+    status_name = kwargs.get("name", "")
     def decorator(func: AnyFunc) -> AnyFunc:
         setattr(func, _METHOD_STATUSES, set(args))
+        setattr(func, _METHOD_STATUS_NAME, status_name)
         return func
     return decorator
 
@@ -35,10 +47,13 @@ class StatusMeta(ABCMeta):
         namespace[_CLASS_STATUSES] = dict()
         for name, item in namespace.items():
             if callable(item) and hasattr(item, _METHOD_STATUSES):
+                status_name = getattr(item, _METHOD_STATUS_NAME)
+                if status_name == "":
+                    status_name = name
                 status_values = getattr(item, _METHOD_STATUSES)
                 if "NIL" not in status_values:
                     status_values.add("NIL")
-                namespace[_CLASS_STATUSES][name] = status_values
+                namespace[_CLASS_STATUSES][status_name] = status_values
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 
 

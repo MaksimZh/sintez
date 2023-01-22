@@ -57,9 +57,15 @@ class Test_Status(unittest.TestCase):
 
         foo = Foo()
         self.assertTrue(foo.is_status("stat", "NIL"))
+        self.assertFalse(foo.is_status("stat", "OK"))
+        self.assertFalse(foo.is_status("stat", "ERR"))
         foo.stat("OK")
+        self.assertFalse(foo.is_status("stat", "NIL"))
         self.assertTrue(foo.is_status("stat", "OK"))
+        self.assertFalse(foo.is_status("stat", "ERR"))
         foo.stat("ERR")
+        self.assertFalse(foo.is_status("stat", "NIL"))
+        self.assertFalse(foo.is_status("stat", "OK"))
         self.assertTrue(foo.is_status("stat", "ERR"))
 
         with self.assertRaises(AssertionError) as ae:
@@ -69,6 +75,23 @@ class Test_Status(unittest.TestCase):
             foo.is_status("stat", "FOO")
         self.assertEqual(str(ae.exception),
             "No 'FOO' value for 'stat' status of Foo")
+
+
+    def test_name(self):
+        class Foo(Status):
+            @status("OK", "ERR", name="alt")
+            def stat(self, s: str) -> None:
+                self._set_status("alt", s)
+
+        foo = Foo()
+        self.assertTrue(foo.is_status("alt", "NIL"))
+        with self.assertRaises(AssertionError) as ae:
+            foo.is_status("stat", "NIL")
+        self.assertEqual(str(ae.exception), "No 'stat' status for Foo")
+        foo.stat("OK")
+        self.assertTrue(foo.is_status("alt", "OK"))
+        foo.stat("ERR")
+        self.assertTrue(foo.is_status("alt", "ERR"))
 
 
 if __name__ == "__main__":
