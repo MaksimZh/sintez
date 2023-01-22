@@ -37,8 +37,11 @@ def status(*args: str, **kwargs: str) -> Callable[[AnyFunc], AnyFunc]:
     assert len(set(kwargs.keys()).difference(set(["name"]))) == 0, \
         f"Only 'name' keyword argument accepted"
     status_name = kwargs.get("name", "")
+    status_values = set(args)
+    if len(status_values) > 0 and "NIL" not in status_values:
+        status_values.add("NIL")
     def decorator(func: AnyFunc) -> AnyFunc:
-        setattr(func, _METHOD_STATUSES, set(args))
+        setattr(func, _METHOD_STATUSES, status_values)
         setattr(func, _METHOD_STATUS_NAME, status_name)
         return func
     return decorator
@@ -68,8 +71,6 @@ class StatusMeta(ABCMeta):
                         or status_values == parent_status_values, \
                         f"Values for '{status_name}' status changed in child class {class_name}"
                     status_values = parent_status_values
-                if "NIL" not in status_values:
-                    status_values.add("NIL")
                 assert status_name not in namespace[_CLASS_STATUSES], \
                     f"Duplicate status '{status_name}' in {cls.__name__}"
                 namespace[_CLASS_STATUSES][status_name] = status_values
@@ -100,10 +101,6 @@ class Status(ABC, metaclass=StatusMeta):
 
     __status: dict[str, str]
 
-    def __new__(cls: type["Status"]) -> "Status":
-        if cls is Status:
-            raise TypeError(f"Only children of {cls.__name__} may be instantiated")
-        return super().__new__(cls)
 
     # CONSTRUCTOR
     # POST: all defined statuses are set to 'NIL'

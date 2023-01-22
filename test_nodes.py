@@ -2,18 +2,18 @@ import unittest
 from typing import Any, Optional, final
 
 from nodes import ValueNode, ProcedureNode, Procedure, Simulator
-from mss import status
+from tools import status
 
 
 class BlackHole(Procedure):
     
     @final
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status()
     def put(self, name: str, value: Any) -> None:
         self._set_status("put", "OK")
     
     @final
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status()
     def get(self, name: str) -> Any:
         self._set_status("get", "OK")
         return 0
@@ -22,13 +22,13 @@ class BlackHole(Procedure):
 class WhiteHole(Procedure):
     
     @final
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status()
     def put(self, name: str, value: Any) -> None:
         self._set_status("put", "INTERNAL_ERROR")
 
     
     @final
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status()
     def get(self, name: str) -> Any:
         self._set_status("get", "INTERNAL_ERROR")
 
@@ -51,7 +51,7 @@ class Divmod(Procedure):
         self.__need_calculate = True
 
     @final
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status()
     def put(self, name: str, value: Any) -> None:
         if type(value) is not int:
             self._set_status("put", "INCOMPATIBLE_TYPE")
@@ -68,7 +68,7 @@ class Divmod(Procedure):
                 self._set_status("put", "INVALID_NAME")
     
     @final
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status()
     def get(self, name: str) -> Any:
         if self.__left is None or self.__right is None:
             self._set_status("get", "INCOMPLETE_INPUT")

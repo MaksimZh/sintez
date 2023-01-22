@@ -38,13 +38,6 @@ class Test_Status(unittest.TestCase):
         self.assertEqual(foo2.get_status("stat"), "OK")
         self.assertEqual(foo.get_status("stat"), "ERR")
 
-    
-    def test_instance_forbidden(self):
-        with self.assertRaises(TypeError) as te:
-            Status()
-        self.assertEqual(str(te.exception),
-            "Only children of Status may be instantiated")
-
 
     def test_is_status(self):
         class Foo(Status):
@@ -163,6 +156,18 @@ class Test_Status(unittest.TestCase):
             def no_stat(self, s: str) -> None:
                 self._set_status("no_stat", s)
 
+        class Child2(Parent):
+            @status("OK", "ERR")
+            def stat(self, s: str) -> None:
+                self._set_status("stat", s)
+
+            @status("OK2", "ERR2", name="alt")
+            def stat2(self, s: str) -> None:
+                self._set_status("alt", s)
+
+            def no_stat(self, s: str) -> None:
+                self._set_status("no_stat", s)
+
         with self.assertRaises(AssertionError) as ae:
             class Bad(Parent):
                 @status("FOO")
@@ -172,7 +177,7 @@ class Test_Status(unittest.TestCase):
         self.assertEqual(str(ae.exception),
             "Values for 'stat' status changed in child class Bad")
 
-        for Foo in [Grand, Parent, Child]:
+        for Foo in [Grand, Parent, Child, Child2]:
             foo = Foo()
             self.assertTrue(foo.is_status("stat", "NIL"))
             self.assertTrue(foo.is_status("alt", "NIL"))

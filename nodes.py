@@ -1,7 +1,7 @@
 from typing import Any, Optional, Union, final
 from enum import Enum, auto
 from abc import abstractmethod
-from mss import Status, ABCStatus, status
+from tools import Status, status
 
 # Nodes implement the calculation scheme logic.
 #
@@ -246,7 +246,7 @@ class ValueNode(Status):
 #     - named and typed input values
 #     - named output values 
 #
-class Procedure(ABCStatus):
+class Procedure(Status):
 
     # COMMANDS
     
