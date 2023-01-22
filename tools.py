@@ -53,6 +53,8 @@ class StatusMeta(ABCMeta):
                 status_values = getattr(item, _METHOD_STATUSES)
                 if "NIL" not in status_values:
                     status_values.add("NIL")
+                assert status_name not in namespace[_CLASS_STATUSES], \
+                    f"Duplicate status '{status_name}' in {cls.__name__}"
                 namespace[_CLASS_STATUSES][status_name] = status_values
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 

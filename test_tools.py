@@ -93,6 +93,18 @@ class Test_Status(unittest.TestCase):
         foo.stat("ERR")
         self.assertTrue(foo.is_status("alt", "ERR"))
 
+        with self.assertRaises(AssertionError) as ae:
+            class Boo(Status):
+                @status("OK", "ERR", name="alt")
+                def stat(self, s: str) -> None:
+                    self._set_status("alt", s)
+
+                @status("OK", "ERR")
+                def alt(self, s: str) -> None:
+                    self._set_status("alt", s)
+            Boo()
+        self.assertTrue(str(ae.exception), "Duplicate status 'alt' in Boo")
+
 
 if __name__ == "__main__":
     unittest.main()
