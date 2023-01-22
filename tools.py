@@ -19,7 +19,7 @@ class StatusMeta(ABCMeta):
         namespace[_CLASS_STATUSES] = dict()
         for name, item in namespace.items():
             if callable(item) and hasattr(item, _METHOD_STATUSES):
-                namespace[_CLASS_STATUSES][name] = None
+                namespace[_CLASS_STATUSES][name] = getattr(item, _METHOD_STATUSES)
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 
 
@@ -29,7 +29,7 @@ class Status(ABC, metaclass=StatusMeta):
 
     def __new__(cls: type["Status"]) -> "Status":
         if cls is Status:
-            raise TypeError(f"Only children of '{cls.__name__}' may be instantiated")
+            raise TypeError(f"Only children of {cls.__name__} may be instantiated")
         return super().__new__(cls)
 
     def __init__(self) -> None:
@@ -44,7 +44,12 @@ class Status(ABC, metaclass=StatusMeta):
     @final
     def _set_status(self, name: str, value: str) -> None:
         assert name in self.__status, self.__no_status_message(name)
+        assert value in getattr(self, _CLASS_STATUSES)[name], \
+            self.__no_status_value_message(name, value)
         self.__status[name] = value
 
     def __no_status_message(self, name: str) -> str:
         return f"No '{name}' status for {self.__class__.__name__}"
+
+    def __no_status_value_message(self, name: str, value: str) -> str:
+        return f"No '{value}' value for '{name}' status of {self.__class__.__name__}"
