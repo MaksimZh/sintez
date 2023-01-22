@@ -6,6 +6,7 @@ _CLASS_STATUSES = "__class_statuses"
 
 AnyFunc = Callable[..., Any]
 
+
 def status(*args: str) -> Callable[[AnyFunc], AnyFunc]:
     def decorator(func: AnyFunc) -> AnyFunc:
         setattr(func, _METHOD_STATUSES, set(args))
@@ -19,7 +20,10 @@ class StatusMeta(ABCMeta):
         namespace[_CLASS_STATUSES] = dict()
         for name, item in namespace.items():
             if callable(item) and hasattr(item, _METHOD_STATUSES):
-                namespace[_CLASS_STATUSES][name] = getattr(item, _METHOD_STATUSES)
+                status_values = getattr(item, _METHOD_STATUSES)
+                if "NIL" not in status_values:
+                    status_values.add("NIL")
+                namespace[_CLASS_STATUSES][name] = status_values
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 
 
@@ -35,11 +39,6 @@ class Status(ABC, metaclass=StatusMeta):
     def __init__(self) -> None:
         self.__status = dict([(name, "NIL") \
             for name, _ in getattr(self, _CLASS_STATUSES).items()])
-    
-    @final
-    def get_status(self, name: str) -> str:
-        assert name in self.__status, self.__no_status_message(name)
-        return self.__status[name]
 
     @final
     def _set_status(self, name: str, value: str) -> None:
@@ -47,6 +46,21 @@ class Status(ABC, metaclass=StatusMeta):
         assert value in getattr(self, _CLASS_STATUSES)[name], \
             self.__no_status_value_message(name, value)
         self.__status[name] = value
+
+
+    @final
+    def get_status(self, name: str) -> str:
+        assert name in self.__status, self.__no_status_message(name)
+        return self.__status[name]
+
+
+    @final
+    def is_status(self, name: str, value: str) -> bool:
+        assert name in self.__status, self.__no_status_message(name)
+        assert value in getattr(self, _CLASS_STATUSES)[name], \
+            self.__no_status_value_message(name, value)
+        return self.__status[name] == value
+
 
     def __no_status_message(self, name: str) -> str:
         return f"No '{name}' status for {self.__class__.__name__}"

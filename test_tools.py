@@ -14,7 +14,6 @@ class Test_Status(unittest.TestCase):
             def no_stat(self, s: str) -> None:
                 self._set_status("no_stat", s)
 
-
         foo = Foo()
         self.assertEqual(foo.get_status("stat"), "NIL")
         foo.stat("OK")
@@ -45,6 +44,31 @@ class Test_Status(unittest.TestCase):
             Status()
         self.assertEqual(str(te.exception),
             "Only children of Status may be instantiated")
+
+
+    def test_is_status(self):
+        class Foo(Status):
+            @status("OK", "ERR")
+            def stat(self, s: str) -> None:
+                self._set_status("stat", s)
+
+            def no_stat(self, s: str) -> None:
+                self._set_status("no_stat", s)
+
+        foo = Foo()
+        self.assertTrue(foo.is_status("stat", "NIL"))
+        foo.stat("OK")
+        self.assertTrue(foo.is_status("stat", "OK"))
+        foo.stat("ERR")
+        self.assertTrue(foo.is_status("stat", "ERR"))
+
+        with self.assertRaises(AssertionError) as ae:
+            foo.is_status("no_stat", "NIL")
+        self.assertEqual(str(ae.exception), "No 'no_stat' status for Foo")
+        with self.assertRaises(AssertionError) as ae:
+            foo.is_status("stat", "FOO")
+        self.assertEqual(str(ae.exception),
+            "No 'FOO' value for 'stat' status of Foo")
 
 
 if __name__ == "__main__":
