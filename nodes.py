@@ -206,7 +206,13 @@ class ValueNode(Status):
         return self.__outputs.copy()
 
     # check is value is valid
-    # def is_valid(self) -> bool
+    @status("OK", "BUILD_INCOMPLETE")
+    def is_valid(self) -> bool:
+        if not self.__build_complete:
+            self._set_status("is_valid", "BUILD_INCOMPLETE")
+            return False
+        self._set_status("is_valid", "OK")
+        return self.__state != self.State.INVALID
 
     # TODO: remove
     class State(Enum):

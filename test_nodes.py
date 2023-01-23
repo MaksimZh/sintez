@@ -126,14 +126,14 @@ class Test_ValueNode(unittest.TestCase):
         self.assertEqual(v.get_outputs(), {p2, p3})
 
 
-    def test_get_state(self):
+    def test_is_valid(self):
         v = ValueNode(int)
-        self.assertTrue(v.is_status("get_state", "NIL"))
-        v.get_state()
-        self.assertTrue(v.is_status("get_state", "BUILD_INCOMPLETE"))
+        self.assertTrue(v.is_status("is_valid", "NIL"))
+        v.is_valid()
+        self.assertTrue(v.is_status("is_valid", "BUILD_INCOMPLETE"))
         v.complete_build()
-        self.assertEqual(v.get_state(), ValueNode.State.INVALID)
-        self.assertTrue(v.is_status("get_state", "OK"))
+        self.assertFalse(v.is_valid())
+        self.assertTrue(v.is_status("is_valid", "OK"))
 
 
     def test_put_last(self):
