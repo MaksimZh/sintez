@@ -220,17 +220,6 @@ class ValueNode(Status):
         NEW = auto(),
         REGULAR = auto(),
 
-    # TODO: remove
-    # get node state
-    # PRE: build complete
-    @status("OK", "BUILD_INCOMPLETE")
-    def get_state(self) -> State:
-        if not self.__build_complete:
-            self._set_status("get_state", "BUILD_INCOMPLETE")
-            return self.State.INVALID
-        self._set_status("get_state", "OK")
-        return self.__state
-
 
     # get value
     # PRE: build complete
@@ -397,11 +386,9 @@ class ProcedureNode(Status):
                 self._set_status("validate", "INPUT_VALIDATION_FAILED")
                 return
         for name, input in self.__inputs.items():
-            state = input.get_state()
-            assert input.is_status("get_state", "OK")
-            if state == ValueNode.State.REGULAR:
-                continue
-            assert state == ValueNode.State.NEW
+            is_valid = input.is_valid()
+            assert input.is_status("is_valid", "OK")
+            assert is_valid
             value = input.get()
             assert input.is_status("get", "OK")
             self.__procedure.put(name, value)
