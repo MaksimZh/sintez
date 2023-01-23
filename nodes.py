@@ -1,5 +1,4 @@
 from typing import Any, Optional, Union, final
-from enum import Enum, auto
 from abc import abstractmethod
 from tools import Status, status
 
@@ -35,13 +34,12 @@ from tools import Status, status
 @final
 class ValueNode(Status):
 
-    __value_type: type
-    __value: Any
-    __state: "State"
     __input: Optional["ProcedureNode"]
     __outputs: set["ProcedureNode"]
+    __value_type: type
     __build_complete: bool
-    __waiting_outputs: set["ProcedureNode"]
+    __is_valid: bool
+    __value: Any
 
     # CONSTRUCTOR
     # POST: no input node
@@ -51,10 +49,9 @@ class ValueNode(Status):
     def __init__(self, value_type: type) -> None:
         super().__init__()
         self.__value_type = value_type
-        self.__state = self.State.INVALID
+        self.__is_valid = False
         self.__input = None
         self.__outputs = set()
-        self.__waiting_outputs = set()
         self.__build_complete = False
 
 
@@ -118,10 +115,8 @@ class ValueNode(Status):
             return
         self._set_status("put", "OK")
         self.__value = value
-        self.__state = self.State.REGULAR if len(self.__outputs) == 0 else \
-            self.State.NEW
+        self.__is_valid = True
         for output in self.__outputs:
-            self.__waiting_outputs.add(output)
             output.invalidate(self)
             assert output.is_status("invalidate", "OK")
 
@@ -136,36 +131,12 @@ class ValueNode(Status):
             self._set_status("invalidate", "BUILD_INCOMPLETE")
             return
         self._set_status("invalidate", "OK")
-        if self.__state == self.State.INVALID:
+        if not self.is_valid():
             return
-        self.__state = self.State.INVALID
+        self.__is_valid = False
         for output in self.__outputs:
             output.invalidate(self)
             assert output.is_status("invalidate", "OK")
-
-
-    # TODO: remove
-    # notify that the value was used by output
-    # PRE: build complete
-    # PRE: `output` is in outputs
-    # PRE: value is valid
-    # POST: `output` used new value
-    # POST: if all outputs used the value then set state to REGULAR
-    @status("OK", "BUILD_INCOMPLETE", "NOT_OUTPUT", "INVALID_VALUE")
-    def used_by(self, output: "ProcedureNode") -> None:
-        if not self.__build_complete:
-            self._set_status("used_by", "BUILD_INCOMPLETE")
-            return
-        if output not in self.__outputs:
-            self._set_status("used_by", "NOT_OUTPUT")
-            return
-        if self.__state is self.State.INVALID:
-            self._set_status("used_by", "INVALID_VALUE")
-            return
-        self.__waiting_outputs.remove(output)
-        if len(self.__waiting_outputs) == 0:
-            self.__state = self.State.REGULAR
-        self._set_status("used_by", "OK")
 
 
     # ensure that the value is valid
@@ -177,7 +148,7 @@ class ValueNode(Status):
         if not self.__build_complete:
             self._set_status("validate", "BUILD_INCOMPLETE")
             return
-        if self.__state != self.State.INVALID:
+        if self.is_valid():
             self._set_status("validate", "OK")
             return
         if self.__input is None:
@@ -212,13 +183,7 @@ class ValueNode(Status):
             self._set_status("is_valid", "BUILD_INCOMPLETE")
             return False
         self._set_status("is_valid", "OK")
-        return self.__state != self.State.INVALID
-
-    # TODO: remove
-    class State(Enum):
-        INVALID = auto(),
-        NEW = auto(),
-        REGULAR = auto(),
+        return self.__is_valid
 
 
     # get value
@@ -229,7 +194,7 @@ class ValueNode(Status):
         if not self.__build_complete:
             self._set_status("get", "BUILD_INCOMPLETE")
             return None
-        if self.__state == self.State.INVALID:
+        if not self.is_valid():
             self._set_status("get", "INVALID_VALUE")
             return None
         self._set_status("get", "OK")
@@ -405,9 +370,6 @@ class ProcedureNode(Status):
                 self._set_status("validate", "FAIL")
                 return
         self._set_status("validate", "OK")
-        for input in self.__inputs.values():
-            input.used_by(self)
-            assert input.is_status("used_by", "OK")
 
 
     # QUERIES

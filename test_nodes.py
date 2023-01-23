@@ -204,38 +204,6 @@ class Test_ValueNode(unittest.TestCase):
         self.assertTrue(p.is_status("invalidate", "OK"))
 
 
-    def test_used(self):
-        v = ValueNode(int)
-        p1 = ProcedureNode(WhiteHole())
-        p2 = ProcedureNode(WhiteHole())
-        p3 = ProcedureNode(WhiteHole())
-        v.add_output(p1)
-        v.add_output(p2)
-        p1.add_input("a", v)
-        p1.complete_build()
-        p2.add_input("a", v)
-        p2.complete_build()
-        p3.complete_build()
-        self.assertTrue(v.is_status("used_by", "NIL"))
-        v.used_by(p1)
-        self.assertTrue(v.is_status("used_by", "BUILD_INCOMPLETE"))
-        v.complete_build()
-        self.assertFalse(v.is_valid())
-        v.used_by(p1)
-        self.assertTrue(v.is_status("used_by", "INVALID_VALUE"))
-        v.put(1)
-        self.assertTrue(v.is_valid())
-        v.used_by(p1)
-        self.assertTrue(v.is_status("used_by", "OK"))
-        self.assertTrue(v.is_valid())
-        v.used_by(p3)
-        self.assertTrue(v.is_status("used_by", "NOT_OUTPUT"))
-        self.assertTrue(v.is_valid())
-        v.used_by(p2)
-        self.assertTrue(v.is_status("used_by", "OK"))
-        self.assertTrue(v.is_valid())
-
-
     def test_validate_first(self):
         v = ValueNode(int)
         self.assertTrue(v.is_status("validate", "NIL"))
