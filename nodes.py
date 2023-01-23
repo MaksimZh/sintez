@@ -22,16 +22,15 @@ from tools import Status, status
 # Can have only one (optional) input procedure.
 # So there is only one component responsible for value update.
 #
-# Note that value must be validated before 'get' query is used.
+# Note that value must be validated before `get` query is used.
 #
 # Contains:
 #     - input procedure node (optional)
 #     - output procedure nodes (any number)
 #     - value type
 #     - build status
-#     - value state (INVALID, NEW, REGULAR)
+#     - value status (valid or not)
 #     - value (optional)
-#     - outputs that have not used NEW value
 #
 @final
 class ValueNode(Status):
@@ -63,9 +62,9 @@ class ValueNode(Status):
 
     # add input node
     # PRE: build not complete
-    # PRE: 'input' is not in input or outputs
+    # PRE: `input` is not in input or outputs
     # PRE: this node has no inputs
-    # POST: input is set to 'input'
+    # POST: input is set to `input`
     @status("OK", "BUILD_COMPLETE", "ALREADY_LINKED", "TOO_MANY_INPUTS")
     def add_input(self, input: "ProcedureNode") -> None:
         if self.__build_complete:
@@ -82,8 +81,8 @@ class ValueNode(Status):
 
     # add output node
     # PRE: build not complete
-    # PRE: 'output' is not in input or outputs
-    # POST: 'output' added to output nodes
+    # PRE: `output` is not in input or outputs
+    # POST: `output` added to output nodes
     @status("OK", "BUILD_COMPLETE", "ALREADY_LINKED")
     def add_output(self, output: "ProcedureNode") -> None:
         if self.__build_complete:
@@ -97,16 +96,16 @@ class ValueNode(Status):
 
     # complete build
     # POST: build complete
-    # POST: state is INVALID
+    # POST: value is invalid
     def complete_build(self) -> None:
         self.__build_complete = True
 
 
     # put value
     # PRE: build complete
-    # PRE: 'value' can be implicitly converted to node type
-    # POST: if there are outputs then state is NEW else REGULAR
-    # POST: value is set to 'value'
+    # PRE: `value` can be implicitly converted to node type
+    # POST: make value new for all outputs
+    # POST: value is set to `value`
     # POST: send invalidate command to all outputs
     # POST: no outputs used NEW value
     @status("OK", "BUILD_INCOMPLETE", "INCOMPATIBLE_TYPE")
@@ -129,8 +128,8 @@ class ValueNode(Status):
 
     # invalidate node
     # PRE: build complete
-    # POST: state is INVALID
-    # POST: if the state has changed then send invalidate command to all outputs
+    # POST: value is invalid
+    # POST: if value was valid then make it new for all outputs
     @status("OK", "BUILD_INCOMPLETE")
     def invalidate(self) -> None:
         if not self.__build_complete:
@@ -145,11 +144,12 @@ class ValueNode(Status):
             assert output.is_status("invalidate", "OK")
 
 
+    # TODO: remove
     # notify that the value was used by output
     # PRE: build complete
-    # PRE: 'output' is in outputs
-    # PRE: state is not INVALID
-    # POST: 'output' used new value
+    # PRE: `output` is in outputs
+    # PRE: value is valid
+    # POST: `output` used new value
     # POST: if all outputs used the value then set state to REGULAR
     @status("OK", "BUILD_INCOMPLETE", "NOT_OUTPUT", "INVALID_VALUE")
     def used_by(self, output: "ProcedureNode") -> None:
@@ -170,8 +170,8 @@ class ValueNode(Status):
 
     # ensure that the value is valid
     # PRE: build complete
-    # PRE: there is input or the state is not INVALID
-    # POST: if the state is INVALID then send validate command to input
+    # PRE: there is input or the value is valid
+    # POST: if the value is invalid then send validate command to input
     @status("OK", "BUILD_INCOMPLETE", "NO_VALUE_SOURCE", "INPUT_FAILED")
     def validate(self) -> None:
         if not self.__build_complete:
@@ -205,12 +205,16 @@ class ValueNode(Status):
     def get_outputs(self) -> set["ProcedureNode"]:
         return self.__outputs.copy()
 
+    # check is value is valid
+    # def is_valid(self) -> bool
 
+    # TODO: remove
     class State(Enum):
         INVALID = auto(),
         NEW = auto(),
         REGULAR = auto(),
 
+    # TODO: remove
     # get node state
     # PRE: build complete
     @status("OK", "BUILD_INCOMPLETE")
@@ -224,7 +228,7 @@ class ValueNode(Status):
 
     # get value
     # PRE: build complete
-    # PRE: state is not INVALID
+    # PRE: value is value
     @status("OK", "BUILD_INCOMPLETE", "INVALID_VALUE")
     def get(self) -> Any:
         if not self.__build_complete:
@@ -278,6 +282,7 @@ class Procedure(Status):
 #     - output procedure nodes (any number)
 #     - build status
 #     - procedure
+#     - input value statuses (new or used)
 #
 @final
 class ProcedureNode(Status):
@@ -304,9 +309,9 @@ class ProcedureNode(Status):
 
     # add input node
     # PRE: build not complete
-    # PRE: 'input' is not in inputs or outputs
-    # PRE: 'name' is not occupied
-    # POST: 'input' added to inputs with 'name'
+    # PRE: `input` is not in inputs or outputs
+    # PRE: `name` is not occupied
+    # POST: `input` added to inputs with `name`
     @status("OK", "BUILD_COMPLETE", "ALREADY_LINKED", "DUPLICATE_NAME")
     def add_input(self, name: str, input: ValueNode) -> None:
         if self.__build_complete:
@@ -324,9 +329,9 @@ class ProcedureNode(Status):
 
     # add output node
     # PRE: build not complete
-    # PRE: 'output' is not in inputs or outputs
-    # PRE: 'name' is not occupied
-    # POST: 'output' added to outputs with 'name'
+    # PRE: `output` is not in inputs or outputs
+    # PRE: `name` is not occupied
+    # POST: `output` added to outputs with `name`
     @status("OK", "ALREADY_LINKED", "DUPLICATE_NAME", "BUILD_COMPLETE")
     def add_output(self, name: str, output: ValueNode) -> None:
         if self.__build_complete:
@@ -348,8 +353,10 @@ class ProcedureNode(Status):
         self.__build_complete = True
 
 
-    # signal that input state changed to NEW or INVALID
+    # TODO: add argument: `input: ValueNode`
+    # signal that input has changed
     # PRE: build complete
+    # PRE: `input` is in node inputs
     # POST: all outputs get invalidate command
     @status("OK", "BUILD_INCOMPLETE")
     def invalidate(self) -> None:
@@ -362,13 +369,15 @@ class ProcedureNode(Status):
             assert output.is_status("invalidate", "OK")
 
 
-    # run the procedure
+    # make procedure outputs up to date with inputs
     # PRE: build complete
-    # PRE: inputs can be validated
+    # PRE: inputs are valid or can be validated
     # PRE: inputs and outputs names and types compatible with the procedure
     # POST: all inputs have been validated
-    # POST: inputs in NEW state were sent to procedure with set command
-    # POST: all outputs have been updated using procedure get query
+    # POST: values from all new inputs requested with `get` query
+    # POST: values of all new inputs sent to procedure with `put` command
+    # POST: all inputs are considered used
+    # POST: all outputs have been updated using procedure `get` query
     @status("OK", "BUILD_INCOMPLETE", "INPUT_VALIDATION_FAILED", "FAIL")
     def validate(self) -> None:
         if not self.__build_complete:
