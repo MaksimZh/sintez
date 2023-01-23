@@ -122,7 +122,7 @@ class ValueNode(Status):
             self.State.NEW
         for output in self.__outputs:
             self.__waiting_outputs.add(output)
-            output.invalidate()
+            output.invalidate(self)
             assert output.is_status("invalidate", "OK")
 
 
@@ -140,7 +140,7 @@ class ValueNode(Status):
             return
         self.__state = self.State.INVALID
         for output in self.__outputs:
-            output.invalidate()
+            output.invalidate(self)
             assert output.is_status("invalidate", "OK")
 
 
@@ -359,15 +359,17 @@ class ProcedureNode(Status):
         self.__build_complete = True
 
 
-    # TODO: add argument: `input: ValueNode`
     # signal that input has changed
     # PRE: build complete
     # PRE: `input` is in node inputs
     # POST: all outputs get invalidate command
-    @status("OK", "BUILD_INCOMPLETE")
-    def invalidate(self) -> None:
+    @status("OK", "BUILD_INCOMPLETE", "NOT_INPUT")
+    def invalidate(self, input: ValueNode) -> None:
         if not self.__build_complete:
             self._set_status("invalidate", "BUILD_INCOMPLETE")
+            return
+        if input not in self.__inputs.values():
+            self._set_status("invalidate", "NOT_INPUT")
             return
         self._set_status("invalidate", "OK")
         for output in self.__outputs.values():
