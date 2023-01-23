@@ -57,23 +57,26 @@ class StatusMeta(ABCMeta):
             namespace: dict[str, Any], **kwargs: Any) -> "StatusMeta":
         namespace[_CLASS_STATUSES] = dict()
         for name, item in namespace.items():
-            if callable(item) and hasattr(item, _METHOD_STATUSES):
-                status_name = getattr(item, _METHOD_STATUS_NAME)
-                if status_name == "":
-                    status_name = name
-                parent_status_values = _find_status_values(status_name, bases)
-                status_values = getattr(item, _METHOD_STATUSES)
-                if parent_status_values is None:
-                    assert len(status_values) > 0, \
-                        f"No values provided for '{status_name}' status of {class_name}"
-                if parent_status_values is not None:
-                    assert len(status_values) == 0 \
-                        or status_values == parent_status_values, \
-                        f"Values for '{status_name}' status changed in child class {class_name}"
-                    status_values = parent_status_values
-                assert status_name not in namespace[_CLASS_STATUSES], \
-                    f"Duplicate status '{status_name}' in {cls.__name__}"
-                namespace[_CLASS_STATUSES][status_name] = status_values
+            is_method_with_status = \
+                callable(item) and hasattr(item, _METHOD_STATUSES)
+            if not is_method_with_status:
+                continue
+            status_name = getattr(item, _METHOD_STATUS_NAME)
+            if status_name == "":
+                status_name = name
+            parent_status_values = _find_status_values(status_name, bases)
+            status_values = getattr(item, _METHOD_STATUSES)
+            if parent_status_values is None:
+                assert len(status_values) > 0, \
+                    f"No values provided for '{status_name}' status of {class_name}"
+            if parent_status_values is not None:
+                assert len(status_values) == 0 \
+                    or status_values == parent_status_values, \
+                    f"Values for '{status_name}' status changed in child class {class_name}"
+                status_values = parent_status_values
+            assert status_name not in namespace[_CLASS_STATUSES], \
+                f"Duplicate status '{status_name}' in {cls.__name__}"
+            namespace[_CLASS_STATUSES][status_name] = status_values
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 
 
