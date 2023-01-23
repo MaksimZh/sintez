@@ -251,6 +251,7 @@ class ProcedureNode(Status):
     __inputs: dict[str, ValueNode]
     __outputs: dict[str, ValueNode]
     __build_complete: bool
+    __new_inputs: set[ValueNode]
 
     # CONSTRUCTOR
     # POST: no input nodes
@@ -263,6 +264,7 @@ class ProcedureNode(Status):
         self.__inputs = dict()
         self.__outputs = dict()
         self.__build_complete = False
+        self.__new_inputs = set()
 
 
     # COMMANDS
@@ -325,6 +327,7 @@ class ProcedureNode(Status):
         if input not in self.__inputs.values():
             self._set_status("invalidate", "NOT_INPUT")
             return
+        self.__new_inputs.add(input)
         self._set_status("invalidate", "OK")
         for output in self.__outputs.values():
             output.invalidate()
@@ -351,6 +354,8 @@ class ProcedureNode(Status):
                 self._set_status("validate", "INPUT_VALIDATION_FAILED")
                 return
         for name, input in self.__inputs.items():
+            if input not in self.__new_inputs:
+                continue
             is_valid = input.is_valid()
             assert input.is_status("is_valid", "OK")
             assert is_valid
@@ -360,6 +365,7 @@ class ProcedureNode(Status):
             if not self.__procedure.is_status("put", "OK"):
                 self._set_status("validate", "FAIL")
                 return
+            self.__new_inputs.remove(input)
         for name, output in self.__outputs.items():
             value = self.__procedure.get(name)
             if not self.__procedure.is_status("get", "OK"):

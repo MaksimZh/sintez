@@ -33,6 +33,30 @@ class WhiteHole(Procedure):
         self._set_status("get", "INTERNAL_ERROR")
 
 
+class LoggingProc(Procedure):
+
+    __log: list[tuple[str, str]]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.__log = []
+    
+    @final
+    @status()
+    def put(self, name: str, value: Any) -> None:
+        self._set_status("put", "OK")
+        self.__log.append(("put", name))
+    
+    @final
+    @status()
+    def get(self, name: str) -> Any:
+        self._set_status("get", "OK")
+        self.__log.append(("get", name))
+        return 0
+
+    def get_log(self) -> list[tuple[str, str]]:
+        return self.__log
+
 
 class Divmod(Procedure):
     
@@ -382,7 +406,8 @@ class Test_ProcNode(unittest.TestCase):
 
 
     def test_validate_success(self):
-        p = ProcedureNode(BlackHole())
+        proc = LoggingProc()
+        p = ProcedureNode(proc)
         i1 = ValueNode(int)
         i2 = ValueNode(int)
         o1 = ValueNode(int)
@@ -410,6 +435,22 @@ class Test_ProcNode(unittest.TestCase):
         self.assertTrue(i2.is_status("get", "OK"))
         self.assertTrue(o1.is_status("put", "OK"))
         self.assertTrue(o2.is_status("put", "OK"))
+        log = proc.get_log()
+        self.assertEqual(len(log), 4)
+        self.assertEqual(set(log[0:2]), {("put", "a"), ("put", "b")})
+        self.assertEqual(set(log[2:4]), {("get", "c"), ("get", "d")})
+        i2.put(3)
+        p.validate()
+        self.assertTrue(p.is_status("validate", "OK"))
+        self.assertTrue(i1.is_status("validate", "OK"))
+        self.assertTrue(i2.is_status("validate", "OK"))
+        self.assertTrue(i2.is_status("get", "OK"))
+        self.assertTrue(o1.is_status("put", "OK"))
+        self.assertTrue(o2.is_status("put", "OK"))
+        log = proc.get_log()[4:]
+        self.assertEqual(len(log), 3)
+        self.assertEqual(log[0], ("put", "b"))
+        self.assertEqual(set(log[1:3]), {("get", "c"), ("get", "d")})
 
 
 class Test_Nodes(unittest.TestCase):
