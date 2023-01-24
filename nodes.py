@@ -40,7 +40,7 @@ class OutputProc(Status):
 #     - output procedure nodes (any number)
 #     - data type
 #     - data status (valid or not)
-#     - data (optional)
+#     - data (if valid)
 #
 @final
 class DataNode(Status):
@@ -98,7 +98,6 @@ class DataNode(Status):
     # PRE: data is valid or node has input that can put data
     # POST: if node has input then `validate` command sent to input
     # POST: data is valid
-    # POST: data is set to `value`
     @status("OK", "NO_INPUT", "INPUT_FAILED")
     def validate(self) -> None:
         if self.is_valid():
