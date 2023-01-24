@@ -2,7 +2,17 @@ import unittest
 from typing import Any, Optional, final
 
 from nodes import ValueNode, ProcedureNode, Procedure, Simulator
+from nodes import DataNode
 from tools import status
+
+
+class Test_DataNode(unittest.TestCase):
+
+    def test_put(self):
+        d = DataNode(int)
+        self.assertTrue(d.is_status("put", "NIL"))
+        d.put(1)
+        self.assertTrue(d.is_status("put", "OK"))
 
 
 class BlackHole(Procedure):

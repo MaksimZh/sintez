@@ -4,6 +4,57 @@ from tools import Status, status
 
 # Nodes implement the calculation scheme logic.
 #
+# DataNode can be linked only to ProcNodes and vice versa.
+# All links have one and only one direction, no loops allowed.
+# The basic concepts of calculation are invalidation and validation.
+# Data change invalidates all succeeding nodes.
+# Procedure validation validates all its output nodes.
+# When node is invalidated it invalidates all succeeding nodes.
+# When node is validated it requests validation of all preceding nodes.
+
+class InputProc(Status):
+    pass
+
+class OutputProc(Status):
+    pass
+
+
+# Implements data node part of calculation scheme logic.
+# Can have only one (optional) input procedure.
+# So there is only one component responsible for value update.
+#
+# Note that value must be validated before `get` query is used.
+#
+# Contains:
+#     - input procedure node (optional)
+#     - output procedure nodes (any number)
+#     - data type
+#     - data status (valid or not)
+#     - data (optional)
+#
+@final
+class DataNode(Status):
+
+    # CONSTRUCTOR
+    # POST: input procedure node is set to `input`
+    # POST: data type is set to `data_type`
+    # POST: data status is invalid
+    def __init__(self, data_type: type):
+        super().__init__()
+
+    # COMMANDS
+
+    # Set value
+    @status("OK")
+    def put(self, value: Any) -> None:
+        self._set_status("put", "OK")
+
+
+# TODO:
+# DEPRECATED:
+
+# Nodes implement the calculation scheme logic.
+#
 # ValueNode can be linked only to ProcedureNodes and vice versa.
 # All links have one and only one direction, no loops allowed.
 # The basic concepts of calculation are invalidation and validation.
