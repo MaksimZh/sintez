@@ -8,7 +8,18 @@ from tools import status
 
 class Test_DataNode(unittest.TestCase):
 
-    class FailingInputProc(InputProc):
+    class InvalidSlotInputProc(InputProc):
+   
+        @status()
+        def add_output(self, output: DataNode, slot: str) -> None:
+            self._set_status("add_output", "INVALID_SLOT_NAME")
+        
+        @status()
+        def validate(self) -> None:
+            pass
+
+
+    class InternalErrorInputProc(InputProc):
    
         @status()
         def add_output(self, output: DataNode, slot: str) -> None:
@@ -22,23 +33,51 @@ class Test_DataNode(unittest.TestCase):
     class LoggingInputProc(InputProc):
 
         __outputs: set[DataNode]
+        __log: list[tuple[Any, ...]]
 
         def __init__(self) -> None:
             super().__init__()
             self.__outputs = set()
+            self.reset_log()
 
         @status()
         def add_output(self, output: DataNode, slot: str) -> None:
             self.__outputs.add(output)
             self._set_status("add_output", "OK")
+            self.__log.append(("add_output", output, slot))
         
         @status()
         def validate(self) -> None:
             for output in self.__outputs:
                 output.put(0)
             self._set_status("validate", "OK")
+            self.__log.append(("validate",))
 
-    
+        def reset_log(self) -> None:
+            self.__log = []
+
+        def get_log(self) -> list[tuple[Any, ...]]:
+            return self.__log
+
+
+    def test_init_no_input(self):
+        d = DataNode(int)
+        self.assertTrue(d.is_status("init", "OK"))
+
+
+    def test_init_with_input(self):
+        i = self.LoggingInputProc()
+        d = DataNode(int, i, "a")
+        self.assertTrue(d.is_status("init", "OK"))
+        self.assertEqual(i.get_log(), [("add_output", d, "a")])
+
+
+    def test_init_with_input_fail(self):
+        i = self.InvalidSlotInputProc()
+        d = DataNode(int, i, "a")
+        self.assertTrue(d.is_status("init", "INVALID_SLOT_NAME"))
+
+
     def test_put(self):
         d = DataNode(complex)
         self.assertTrue(d.is_status("put", "NIL"))
@@ -82,7 +121,7 @@ class Test_DataNode(unittest.TestCase):
 
 
     def test_validate_with_input_fail(self):
-        i = self.FailingInputProc()
+        i = self.InternalErrorInputProc()
         d = DataNode(int, i, "a")
         self.assertTrue(d.is_status("validate", "NIL"))
         self.assertFalse(d.is_valid())
@@ -101,8 +140,10 @@ class Test_DataNode(unittest.TestCase):
         d = DataNode(int, i, "a")
         self.assertTrue(d.is_status("validate", "NIL"))
         self.assertFalse(d.is_valid())
+        i.reset_log()
         d.validate()
         self.assertTrue(d.is_status("validate", "OK"))
+        self.assertEqual(i.get_log(), [("validate",)])
         self.assertTrue(d.is_valid())
         self.assertEqual(d.get(), 0)
 

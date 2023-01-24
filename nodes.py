@@ -15,7 +15,7 @@ from tools import Status, status
 class InputProc(Status):
     
     @abstractmethod
-    @status("OK")
+    @status("OK", "INVALID_SLOT_NAME")
     def add_output(self, output: "DataNode", slot: str) -> None:
         pass
         
@@ -51,11 +51,13 @@ class DataNode(Status):
     __is_valid: bool
 
     # CONSTRUCTOR
+    # PRE: input procedure node accepts connection of `input` to `slot`
     # POST: input procedure node is set to `input`
     # POST: if `input` is not None add this node to `input` output slot `slot`
     # POST: no output procedure nodes
     # POST: data type is set to `data_type`
     # POST: data is invalid
+    @status("OK", "INVALID_SLOT_NAME", name="init")
     def __init__(self,
             data_type: type,
             input: Optional[InputProc] = None,
@@ -65,11 +67,15 @@ class DataNode(Status):
         self.__is_valid = False
         self.__input = None
         if input is None:
+            self._set_status("init", "OK")
             return
         input.add_output(self, slot)
-        if not input.is_status("add_output", "OK"):
+        if input.is_status("add_output", "INVALID_SLOT_NAME"):
+            self._set_status("init", "INVALID_SLOT_NAME")
             return
+        assert(input.is_status("add_output", "OK"))
         self.__input = input
+        self._set_status("init", "OK")
 
 
     # COMMANDS
@@ -89,6 +95,10 @@ class DataNode(Status):
 
 
     # Make sure data is valid
+    # PRE: data is valid or node has input that can put data
+    # POST: if node has input then `validate` command sent to input
+    # POST: data is valid
+    # POST: data is set to `value`
     @status("OK", "NO_INPUT", "INPUT_FAILED")
     def validate(self) -> None:
         if self.is_valid():
