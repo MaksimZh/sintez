@@ -13,7 +13,17 @@ from tools import Status, status
 # When node is validated it requests validation of all preceding nodes.
 
 class InputProc(Status):
-    pass
+    
+    @abstractmethod
+    @status("OK")
+    def add_output(self, output: "DataNode", slot: str) -> None:
+        pass
+        
+    @abstractmethod
+    @status("OK", "INTERNAL_ERROR")
+    def validate(self) -> None:
+        pass
+
 
 class OutputProc(Status):
     pass
@@ -35,25 +45,80 @@ class OutputProc(Status):
 @final
 class DataNode(Status):
 
+    __input: Optional[InputProc]
     __type: type
+    __data: Any
+    __is_valid: bool
 
     # CONSTRUCTOR
     # POST: input procedure node is set to `input`
+    # POST: if `input` is not None add this node to `input` output slot `slot`
+    # POST: no output procedure nodes
     # POST: data type is set to `data_type`
-    # POST: data status is invalid
-    def __init__(self, data_type: type):
+    # POST: data is invalid
+    def __init__(self,
+            data_type: type,
+            input: Optional[InputProc] = None,
+            slot: Optional[str] = None):
         super().__init__()
         self.__type = data_type
+        self.__is_valid = False
+        self.__input = None
+        if input is None:
+            return
+        input.add_output(self, slot)
+        if not input.is_status("add_output", "OK"):
+            return
+        self.__input = input
+
 
     # COMMANDS
 
-    # Set value
+    # Set data
+    # PRE: `value` type can be implicitly converted to data type
+    # POST: data is valid
+    # POST: data is set to `value`
     @status("OK", "INCOMPATIBLE_TYPE")
     def put(self, value: Any) -> None:
         if not _type_fits(type(value), self.__type):
             self._set_status("put", "INCOMPATIBLE_TYPE")
             return
+        self.__data = value
+        self.__is_valid = True
         self._set_status("put", "OK")
+
+
+    # Make sure data is valid
+    @status("OK", "NO_INPUT", "INPUT_FAILED")
+    def validate(self) -> None:
+        if self.is_valid():
+            self._set_status("validate", "OK")
+            return
+        if self.__input is None:
+            self._set_status("validate", "NO_INPUT")
+            return
+        self.__input.validate()
+        if not self.__input.is_status("validate", "OK"):
+            self._set_status("validate", "INPUT_FAILED")
+            return
+        self._set_status("validate", "OK")
+
+
+    # QUERIES
+
+    # Check if data is valid
+    def is_valid(self) -> bool:
+        return self.__is_valid
+
+    # Get data
+    # PRE: data is valid
+    @status("OK", "INVALID_DATA")
+    def get(self) -> Any:
+        if not self.is_valid():
+            self._set_status("get", "INVALID_DATA")
+            return None
+        self._set_status("get", "OK")
+        return self.__data
 
 
 # TODO:

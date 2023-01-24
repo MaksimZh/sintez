@@ -2,23 +2,109 @@ import unittest
 from typing import Any, Optional, final
 
 from nodes import ValueNode, ProcedureNode, Procedure, Simulator
-from nodes import DataNode
+from nodes import DataNode, InputProc
 from tools import status
 
 
 class Test_DataNode(unittest.TestCase):
 
+    class FailingInputProc(InputProc):
+   
+        @status()
+        def add_output(self, output: DataNode, slot: str) -> None:
+            self._set_status("add_output", "OK")
+        
+        @status()
+        def validate(self) -> None:
+            self._set_status("validate", "INTERNAL_ERROR")
+
+
+    class LoggingInputProc(InputProc):
+
+        __outputs: set[DataNode]
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.__outputs = set()
+
+        @status()
+        def add_output(self, output: DataNode, slot: str) -> None:
+            self.__outputs.add(output)
+            self._set_status("add_output", "OK")
+        
+        @status()
+        def validate(self) -> None:
+            for output in self.__outputs:
+                output.put(0)
+            self._set_status("validate", "OK")
+
+    
     def test_put(self):
         d = DataNode(complex)
         self.assertTrue(d.is_status("put", "NIL"))
+        self.assertFalse(d.is_valid())
         d.put(1 + 2j)
         self.assertTrue(d.is_status("put", "OK"))
+        self.assertTrue(d.is_valid())
         d.put(1.5)
         self.assertTrue(d.is_status("put", "OK"))
+        self.assertTrue(d.is_valid())
         d.put(1)
         self.assertTrue(d.is_status("put", "OK"))
+        self.assertTrue(d.is_valid())
         d.put("foo")
         self.assertTrue(d.is_status("put", "INCOMPATIBLE_TYPE"))
+        self.assertTrue(d.is_valid())
+
+
+    def test_get(self):
+        d = DataNode(int)
+        self.assertTrue(d.is_status("get", "NIL"))
+        d.get()
+        self.assertTrue(d.is_status("get", "INVALID_DATA"))
+        d.put(7)
+        self.assertEqual(d.get(), 7)
+        self.assertTrue(d.is_status("get", "OK"))
+
+
+    def test_validate_no_input(self):
+        d = DataNode(int)
+        self.assertTrue(d.is_status("validate", "NIL"))
+        self.assertFalse(d.is_valid())
+        d.validate()
+        self.assertTrue(d.is_status("validate", "NO_INPUT"))
+        self.assertFalse(d.is_valid())
+        d.put(7)
+        self.assertTrue(d.is_valid())
+        d.validate()
+        self.assertTrue(d.is_status("validate", "OK"))
+        self.assertTrue(d.is_valid())
+
+
+    def test_validate_with_input_fail(self):
+        i = self.FailingInputProc()
+        d = DataNode(int, i, "a")
+        self.assertTrue(d.is_status("validate", "NIL"))
+        self.assertFalse(d.is_valid())
+        d.validate()
+        self.assertTrue(d.is_status("validate", "INPUT_FAILED"))
+        self.assertFalse(d.is_valid())
+        d.put(7)
+        self.assertTrue(d.is_valid())
+        d.validate()
+        self.assertTrue(d.is_status("validate", "OK"))
+        self.assertTrue(d.is_valid())
+
+
+    def test_validate_with_input(self):
+        i = self.LoggingInputProc()
+        d = DataNode(int, i, "a")
+        self.assertTrue(d.is_status("validate", "NIL"))
+        self.assertFalse(d.is_valid())
+        d.validate()
+        self.assertTrue(d.is_status("validate", "OK"))
+        self.assertTrue(d.is_valid())
+        self.assertEqual(d.get(), 0)
 
 
 class BlackHole(Procedure):
