@@ -35,18 +35,24 @@ class OutputProc(Status):
 @final
 class DataNode(Status):
 
+    __type: type
+
     # CONSTRUCTOR
     # POST: input procedure node is set to `input`
     # POST: data type is set to `data_type`
     # POST: data status is invalid
     def __init__(self, data_type: type):
         super().__init__()
+        self.__type = data_type
 
     # COMMANDS
 
     # Set value
-    @status("OK")
+    @status("OK", "INCOMPATIBLE_TYPE")
     def put(self, value: Any) -> None:
+        if not _type_fits(type(value), self.__type):
+            self._set_status("put", "INCOMPATIBLE_TYPE")
+            return
         self._set_status("put", "OK")
 
 

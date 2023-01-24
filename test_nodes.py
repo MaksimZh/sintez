@@ -13,6 +13,8 @@ class Test_DataNode(unittest.TestCase):
         self.assertTrue(d.is_status("put", "NIL"))
         d.put(1)
         self.assertTrue(d.is_status("put", "OK"))
+        d.put("foo")
+        self.assertTrue(d.is_status("put", "INCOMPATIBLE_TYPE"))
 
 
 class BlackHole(Procedure):
