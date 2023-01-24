@@ -9,8 +9,12 @@ from tools import status
 class Test_DataNode(unittest.TestCase):
 
     def test_put(self):
-        d = DataNode(int)
+        d = DataNode(complex)
         self.assertTrue(d.is_status("put", "NIL"))
+        d.put(1 + 2j)
+        self.assertTrue(d.is_status("put", "OK"))
+        d.put(1.5)
+        self.assertTrue(d.is_status("put", "OK"))
         d.put(1)
         self.assertTrue(d.is_status("put", "OK"))
         d.put("foo")
