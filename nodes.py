@@ -15,8 +15,18 @@ from tools import Status, status
 class InputData(Status):
     pass
 
+
+# Interface of data destination for procedures.
+#
+# Contains:
+#     - data type
+#     - data (write only)
+#
 class OutputData(Status):
 
+    # Set data
+    # PRE: `value` type can be implicitly converted to data type
+    # POST: data is set to `value`
     @abstractmethod
     @status("OK", "INCOMPATIBLE_TYPE")
     def put(self, value: Any) -> None:
