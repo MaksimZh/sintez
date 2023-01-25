@@ -2,8 +2,29 @@ import unittest
 from typing import Any, Optional, final
 
 from nodes import ValueNode, ProcedureNode, Procedure, Simulator
-from nodes import DataNode, OutputData, InputProc
+from nodes import DataNode, InputData, OutputData, InputProc, OutputProc
 from tools import status
+
+
+class Logger:
+
+    __log: list[tuple[Any, ...]]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reset_log()
+    
+    @final
+    def _log(self, *args: Any) -> None:
+        self.__log.append(tuple(args))
+
+    @final
+    def reset_log(self) -> None:
+        self.__log = []
+
+    @final
+    def get_log(self) -> list[tuple[Any, ...]]:
+        return self.__log
 
 
 class Test_DataNode(unittest.TestCase):
@@ -36,34 +57,39 @@ class Test_DataNode(unittest.TestCase):
             self._set_status("validate", "INTERNAL_ERROR")
 
 
-    class LoggingInputProc(InputProc):
+    class LoggingInputProc(Logger, InputProc):
 
         __outputs: set[OutputData]
-        __log: list[tuple[Any, ...]]
 
         def __init__(self) -> None:
             super().__init__()
             self.__outputs = set()
-            self.reset_log()
 
         @status()
         def add_output(self, output: DataNode, slot: str) -> None:
             self.__outputs.add(output)
             self._set_status("add_output", "OK")
-            self.__log.append(("add_output", output, slot))
+            self._log("add_output", output, slot)
         
         @status()
         def validate(self) -> None:
             for output in self.__outputs:
                 output.put(0)
             self._set_status("validate", "OK")
-            self.__log.append(("validate",))
+            self._log("validate")
 
-        def reset_log(self) -> None:
-            self.__log = []
+    
+    class LoggingOutputProc(Logger, OutputProc):
 
-        def get_log(self) -> list[tuple[Any, ...]]:
-            return self.__log
+        def __init__(self) -> None:
+            super().__init__()
+        
+        def invalidate(self, input: InputData) -> None:
+            self._log("invalidate", input)
+
+
+    class LoggingProc(LoggingInputProc, LoggingOutputProc):
+        pass
 
 
     def test_init_no_input(self):
@@ -93,6 +119,19 @@ class Test_DataNode(unittest.TestCase):
             self.assertTrue(d.is_status("init", status))
             self.assertIs(d.get_type(), float)
             self.assertFalse(d.is_valid())
+
+
+    def test_add_output(self):
+        i = self.LoggingProc()
+        d = DataNode(int, i, "a")
+        o1 = self.LoggingOutputProc()
+        self.assertTrue(d.is_status("add_output", "NIL"))
+        d.add_output(o1)
+        self.assertTrue(d.is_status("add_output", "OK"))
+        d.add_output(o1)
+        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
+        d.add_output(i)
+        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
 
 
     def test_put(self):
@@ -163,6 +202,24 @@ class Test_DataNode(unittest.TestCase):
         self.assertEqual(i.get_log(), [("validate",)])
         self.assertTrue(d.is_valid())
         self.assertEqual(d.get(), 0)
+
+
+    def test_invalidate(self):
+        d = DataNode(int)
+        d.put(7)
+        self.assertTrue(d.is_valid())
+        d.invalidate()
+        self.assertFalse(d.is_valid())
+
+
+    def test_invalidate_outputs(self):
+        d = DataNode(int)
+        o1 = self.LoggingOutputProc()
+        d.add_output(o1)
+        d.put(7)
+        self.assertTrue(d.is_valid())
+        d.invalidate()
+        self.assertFalse(d.is_valid())
 
 
 class BlackHole(Procedure):

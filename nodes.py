@@ -12,11 +12,27 @@ from tools import Status, status
 # When node is invalidated it invalidates all succeeding nodes.
 # When node is validated it requests validation of all preceding nodes.
 
+# Interface of data input for procedures.
+#
+# Contains:
+#     - output procedures
+#     - other linked procedures
+#     - data type
+#     - data status (valid or not)
+#     - data (if valid, read only)
+#
 class InputData(Status):
-    pass
+    
+    # Add output procedure
+    # PRE: `output` is not linked to this data in any way
+    # POST: `output` is added to output procedures
+    @abstractmethod
+    @status("OK", "ALREADY_LINKED")
+    def add_output(self, output: "OutputProc") -> None:
+        pass
 
 
-# Interface of data destination for procedures.
+# Interface of data output for procedures.
 #
 # Contains:
 #     - data type
@@ -34,6 +50,11 @@ class OutputData(Status):
     def put(self, value: Any) -> None:
         pass
 
+    # Inform about input invalidation
+    @abstractmethod
+    def invalidate(self) -> None:
+        pass
+
 
     # QUERIES
 
@@ -43,7 +64,7 @@ class OutputData(Status):
         pass
 
 
-# Interface of data source for data nodes.
+# Interface of data input for data nodes.
 #
 # Contains:
 #     - output data nodes at named slots
@@ -54,9 +75,9 @@ class InputProc(Status):
     
     # Add output data node
     # PRE: `slot` exists and not occupied
-    # PRE: `output` is not linked to this data source in any way
+    # PRE: `output` is not linked to this data input in any way
     # PRE: `output` type is compatible with `slot`
-    # POST: `output` is linked to this data source as `slot`
+    # POST: `output` is linked to this data input as `slot`
     @abstractmethod
     @status("OK",
         "INVALID_SLOT_NAME",
@@ -93,9 +114,10 @@ class OutputProc(Status):
 #     - data (if valid)
 #
 @final
-class DataNode(OutputData, Status):
+class DataNode(InputData, OutputData, Status):
 
     __input: Optional[InputProc]
+    __outputs: set[OutputProc]
     __type: type
     __data: Any
     __is_valid: bool
@@ -121,6 +143,7 @@ class DataNode(OutputData, Status):
         self.__type = data_type
         self.__is_valid = False
         self.__input = None
+        self.__outputs = set()
         if input is None:
             self._set_status("init", "OK")
             return
@@ -133,6 +156,17 @@ class DataNode(OutputData, Status):
 
 
     # COMMANDS
+    
+    # Add output procedure
+    # PRE: `output` is not linked to this data inputs or outputs
+    # POST: `output` is added to output procedures
+    @status("OK", "ALREADY_LINKED")
+    def add_output(self, output: "OutputProc") -> None:
+        if output is self.__input or output in self.__outputs:
+            self._set_status("add_output", "ALREADY_LINKED")
+            return
+        self.__outputs.add(output)
+        self._set_status("add_output", "OK")
 
     # Set data
     # PRE: `value` type can be implicitly converted to data type
@@ -147,10 +181,15 @@ class DataNode(OutputData, Status):
         self.__is_valid = True
         self._set_status("put", "OK")
 
+    # Inform about input invalidation
+    # POST: if data is valid then send `invalidate` command to all outputs
+    # POST: data is invalid
+    def invalidate(self) -> None:
+        self.__is_valid = False
 
     # Make sure data is valid
     # PRE: data is valid or node has input that can put data
-    # POST: if node has input then `validate` command sent to input
+    # POST: if data is invalid then send `validate` command to input
     # POST: data is valid
     @status("OK", "NO_INPUT", "INPUT_FAILED")
     def validate(self) -> None:
