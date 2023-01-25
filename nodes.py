@@ -201,7 +201,11 @@ class DataNode(InputData, OutputData, Status):
     # POST: if data is valid then send `invalidate` command to all outputs
     # POST: data is invalid
     def invalidate(self) -> None:
+        if not self.is_valid():
+            return
         self.__is_valid = False
+        for output in self.__outputs:
+            output.invalidate(self)
 
     # Make sure data is valid
     # PRE: data is valid or node has input that can put data

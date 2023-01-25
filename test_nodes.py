@@ -240,10 +240,15 @@ class Test_DataNode(unittest.TestCase):
         d.add_output(o1)
         o2 = self.LoggingOutputProc()
         d.add_output(o2)
+        d.invalidate()
+        self.assertEqual(o1.get_log(), [])
+        self.assertEqual(o2.get_log(), [])
         d.put(7)
         self.assertTrue(d.is_valid())
         d.invalidate()
         self.assertFalse(d.is_valid())
+        self.assertEqual(o1.get_log(), [("invalidate", d)])
+        self.assertEqual(o2.get_log(), [("invalidate", d)])
 
 
 class BlackHole(Procedure):
