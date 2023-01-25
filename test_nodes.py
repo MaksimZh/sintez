@@ -2,7 +2,7 @@ import unittest
 from typing import Any, Optional, final
 
 from nodes import ValueNode, ProcedureNode, Procedure, Simulator
-from nodes import DataNode, InputProc
+from nodes import DataNode, OutputData, InputProc
 from tools import status
 
 
@@ -11,7 +11,7 @@ class Test_DataNode(unittest.TestCase):
     class InvalidSlotInputProc(InputProc):
    
         @status()
-        def add_output(self, output: DataNode, slot: str) -> None:
+        def add_output(self, output: OutputData, slot: str) -> None:
             self._set_status("add_output", "INVALID_SLOT_NAME")
         
         @status()
@@ -32,7 +32,7 @@ class Test_DataNode(unittest.TestCase):
 
     class LoggingInputProc(InputProc):
 
-        __outputs: set[DataNode]
+        __outputs: set[OutputData]
         __log: list[tuple[Any, ...]]
 
         def __init__(self) -> None:

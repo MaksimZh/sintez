@@ -12,11 +12,22 @@ from tools import Status, status
 # When node is invalidated it invalidates all succeeding nodes.
 # When node is validated it requests validation of all preceding nodes.
 
+class InputData(Status):
+    pass
+
+class OutputData(Status):
+
+    @abstractmethod
+    @status("OK", "INCOMPATIBLE_TYPE")
+    def put(self, value: Any) -> None:
+        pass
+
+
 class InputProc(Status):
     
     @abstractmethod
     @status("OK", "INVALID_SLOT_NAME")
-    def add_output(self, output: "DataNode", slot: str) -> None:
+    def add_output(self, output: OutputData, slot: str) -> None:
         pass
         
     @abstractmethod
@@ -43,7 +54,7 @@ class OutputProc(Status):
 #     - data (if valid)
 #
 @final
-class DataNode(Status):
+class DataNode(OutputData, Status):
 
     __input: Optional[InputProc]
     __type: type
@@ -84,7 +95,7 @@ class DataNode(Status):
     # PRE: `value` type can be implicitly converted to data type
     # POST: data is valid
     # POST: data is set to `value`
-    @status("OK", "INCOMPATIBLE_TYPE")
+    @status()
     def put(self, value: Any) -> None:
         if not _type_fits(type(value), self.__type):
             self._set_status("put", "INCOMPATIBLE_TYPE")
