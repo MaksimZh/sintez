@@ -1,4 +1,4 @@
-from typing import Any, Callable, final, Optional
+from typing import Any, Callable, final
 from abc import ABC, ABCMeta
 
 _METHOD_STATUS_NAME = "__method_status_name"
@@ -55,7 +55,17 @@ def status(*args: str, **kwargs: str) -> Callable[[AnyFunc], AnyFunc]:
 class StatusMeta(ABCMeta):
     def __new__(cls, class_name: str, bases: tuple[type, ...],
             namespace: dict[str, Any], **kwargs: Any) -> "StatusMeta":
-        namespace[_CLASS_STATUSES] = dict()
+        parent_statuses = set[str]()
+        all_status_values = dict[str, set[str]]()
+        for base in bases:
+            if not hasattr(base, _CLASS_STATUSES):
+                continue
+            for name, values in getattr(base, _CLASS_STATUSES).items():
+                parent_statuses.add(name)
+                if name in all_status_values:
+                    assert values == all_status_values[name]
+                    continue
+                all_status_values[name] = values
         for name, item in namespace.items():
             is_method_with_status = \
                 callable(item) and hasattr(item, _METHOD_STATUSES)
@@ -64,19 +74,19 @@ class StatusMeta(ABCMeta):
             status_name = getattr(item, _METHOD_STATUS_NAME)
             if status_name == "":
                 status_name = name
-            parent_status_values = _find_status_values(status_name, bases)
-            status_values = getattr(item, _METHOD_STATUSES)
-            if parent_status_values is None:
-                assert len(status_values) > 0, \
-                    f"No values provided for '{status_name}' status of {class_name}"
-            if parent_status_values is not None:
-                assert len(status_values) == 0 \
-                    or status_values == parent_status_values, \
-                    f"Values for '{status_name}' status changed in child class {class_name}"
-                status_values = parent_status_values
-            assert status_name not in namespace[_CLASS_STATUSES], \
+            assert status_name not in all_status_values \
+                    or status_name in parent_statuses, \
                 f"Duplicate status '{status_name}' in {cls.__name__}"
-            namespace[_CLASS_STATUSES][status_name] = status_values
+            status_values = getattr(item, _METHOD_STATUSES)
+            if status_name in parent_statuses:
+                assert len(status_values) == 0 \
+                    or status_values == all_status_values[status_name], \
+                    f"Values for '{status_name}' status changed in child class {class_name}"
+                continue
+            assert len(status_values) > 0, \
+                f"No values provided for '{status_name}' status of {class_name}"
+            all_status_values[status_name] = status_values
+        namespace[_CLASS_STATUSES] = all_status_values
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 
 
@@ -157,13 +167,3 @@ class Status(ABC, metaclass=StatusMeta):
 
     def __no_status_value_message(self, name: str, value: str) -> str:
         return f"No '{value}' value for '{name}' status of {self.__class__.__name__}"
-
-
-def _find_status_values(name: str, classes: tuple[type, ...]) -> Optional[set[str]]:
-    for c in classes:
-        if not issubclass(c, Status):
-            continue
-        statuses = getattr(c, _CLASS_STATUSES)
-        if name in statuses:
-            return statuses[name]
-    return None

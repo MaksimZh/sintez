@@ -168,6 +168,9 @@ class Test_Status(unittest.TestCase):
             def no_stat(self, s: str) -> None:
                 self._set_status("no_stat", s)
 
+        class Child3(Parent):
+            pass
+
         with self.assertRaises(AssertionError) as ae:
             class Bad(Parent):
                 @status("FOO")
@@ -177,7 +180,7 @@ class Test_Status(unittest.TestCase):
         self.assertEqual(str(ae.exception),
             "Values for 'stat' status changed in child class Bad")
 
-        for Foo in [Grand, Parent, Child, Child2]:
+        for Foo in [Grand, Parent, Child, Child2, Child3]:
             foo = Foo()
             self.assertTrue(foo.is_status("stat", "NIL"))
             self.assertTrue(foo.is_status("alt", "NIL"))
