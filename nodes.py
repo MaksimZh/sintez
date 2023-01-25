@@ -96,8 +96,19 @@ class InputProc(Status):
         pass
 
 
+# Interface of data outputs for data nodes.
+#
+# Contains:
+#     - linked inputs
+#
 class OutputProc(Status):
-    pass
+
+    # Inform about input invalidation
+    # PRE: `input` is in procedure inputs
+    @abstractmethod
+    @status("OK", "NOT_INPUT")
+    def invalidate(self, input: InputData) -> None:
+        pass
 
 
 # Implements data node part of calculation scheme logic.
@@ -172,14 +183,19 @@ class DataNode(InputData, OutputData, Status):
     # PRE: `value` type can be implicitly converted to data type
     # POST: data is valid
     # POST: data is set to `value`
+    # POST: is data was valid send `invalidate` command to all outputs
     @status()
     def put(self, value: Any) -> None:
         if not _type_fits(type(value), self.__type):
             self._set_status("put", "INCOMPATIBLE_TYPE")
             return
         self.__data = value
-        self.__is_valid = True
         self._set_status("put", "OK")
+        if not self.is_valid():
+            self.__is_valid = True
+            return
+        for output in self.__outputs:
+            output.invalidate(self)
 
     # Inform about input invalidation
     # POST: if data is valid then send `invalidate` command to all outputs

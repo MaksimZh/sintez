@@ -84,7 +84,9 @@ class Test_DataNode(unittest.TestCase):
         def __init__(self) -> None:
             super().__init__()
         
+        @status()
         def invalidate(self, input: InputData) -> None:
+            self._set_status("invalidate", "OK")
             self._log("invalidate", input)
 
 
@@ -151,6 +153,26 @@ class Test_DataNode(unittest.TestCase):
         self.assertTrue(d.is_status("put", "INCOMPATIBLE_TYPE"))
         self.assertTrue(d.is_valid())
 
+    
+    def test_put_outputs(self):
+        d = DataNode(int)
+        o1 = self.LoggingOutputProc()
+        d.add_output(o1)
+        o2 = self.LoggingOutputProc()
+        d.add_output(o2)
+        self.assertTrue(d.is_status("put", "NIL"))
+        self.assertFalse(d.is_valid())
+        d.put(1)
+        self.assertTrue(d.is_status("put", "OK"))
+        self.assertTrue(d.is_valid())
+        self.assertEqual(o1.get_log(), [])
+        self.assertEqual(o2.get_log(), [])
+        d.put(2)
+        self.assertTrue(d.is_status("put", "OK"))
+        self.assertTrue(d.is_valid())
+        self.assertEqual(o1.get_log(), [("invalidate", d)])
+        self.assertEqual(o2.get_log(), [("invalidate", d)])
+
 
     def test_get(self):
         d = DataNode(int)
@@ -216,6 +238,8 @@ class Test_DataNode(unittest.TestCase):
         d = DataNode(int)
         o1 = self.LoggingOutputProc()
         d.add_output(o1)
+        o2 = self.LoggingOutputProc()
+        d.add_output(o2)
         d.put(7)
         self.assertTrue(d.is_valid())
         d.invalidate()
