@@ -8,11 +8,17 @@ from tools import status
 
 class Test_DataNode(unittest.TestCase):
 
-    class InvalidSlotInputProc(InputProc):
+    class InvalidOutputInputProc(InputProc):
+
+        __fail_status: str
+
+        def __init__(self, fail_status: str) -> None:
+            super().__init__()
+            self.__fail_status = fail_status
    
         @status()
         def add_output(self, output: OutputData, slot: str) -> None:
-            self._set_status("add_output", "INVALID_SLOT_NAME")
+            self._set_status("add_output", self.__fail_status)
         
         @status()
         def validate(self) -> None:
@@ -77,11 +83,16 @@ class Test_DataNode(unittest.TestCase):
 
 
     def test_init_with_input_fail(self):
-        i = self.InvalidSlotInputProc()
-        d = DataNode(float, i, "a")
-        self.assertTrue(d.is_status("init", "INVALID_SLOT_NAME"))
-        self.assertIs(d.get_type(), float)
-        self.assertFalse(d.is_valid())
+        for status in [
+                "INVALID_SLOT_NAME",
+                "SLOT_OCCUPIED",
+                "ALREADY_LINKED",
+                "INCOMPATIBLE_TYPE"]:
+            i = self.InvalidOutputInputProc(status)
+            d = DataNode(float, i, "a")
+            self.assertTrue(d.is_status("init", status))
+            self.assertIs(d.get_type(), float)
+            self.assertFalse(d.is_valid())
 
 
     def test_put(self):

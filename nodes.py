@@ -43,13 +43,32 @@ class OutputData(Status):
         pass
 
 
+# Interface of data source for data nodes.
+#
+# Contains:
+#     - output data nodes at named slots
+#     - other linked data nodes
+#     - procedure
+#
 class InputProc(Status):
     
+    # Add output data node
+    # PRE: `slot` exists and not occupied
+    # PRE: `output` is not linked to this data source in any way
+    # PRE: `output` type is compatible with `slot`
+    # POST: `output` is linked to this data source as `slot`
     @abstractmethod
-    @status("OK", "INVALID_SLOT_NAME")
+    @status("OK",
+        "INVALID_SLOT_NAME",
+        "SLOT_OCCUPIED",
+        "ALREADY_LINKED",
+        "INCOMPATIBLE_TYPE")
     def add_output(self, output: OutputData, slot: str) -> None:
         pass
         
+    # Request validation of all output data
+    # PRE: procedure can succeed
+    # POST: send values to all outputs with `put` command
     @abstractmethod
     @status("OK", "INTERNAL_ERROR")
     def validate(self) -> None:
@@ -88,7 +107,12 @@ class DataNode(OutputData, Status):
     # POST: no output procedure nodes
     # POST: data type is set to `data_type`
     # POST: data is invalid
-    @status("OK", "INVALID_SLOT_NAME", name="init")
+    @status("OK",
+        "INVALID_SLOT_NAME",
+        "SLOT_OCCUPIED",
+        "ALREADY_LINKED",
+        "INCOMPATIBLE_TYPE",
+        name="init")
     def __init__(self,
             data_type: type,
             input: Optional[InputProc] = None,
@@ -101,10 +125,9 @@ class DataNode(OutputData, Status):
             self._set_status("init", "OK")
             return
         input.add_output(self, slot)
-        if input.is_status("add_output", "INVALID_SLOT_NAME"):
-            self._set_status("init", "INVALID_SLOT_NAME")
+        if not input.is_status("add_output", "OK"):
+            self._set_status("init", input.get_status("add_output"))
             return
-        assert(input.is_status("add_output", "OK"))
         self.__input = input
         self._set_status("init", "OK")
 
