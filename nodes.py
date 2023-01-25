@@ -24,12 +24,22 @@ class InputData(Status):
 #
 class OutputData(Status):
 
+    # COMMANDS
+
     # Set data
     # PRE: `value` type can be implicitly converted to data type
     # POST: data is set to `value`
     @abstractmethod
     @status("OK", "INCOMPATIBLE_TYPE")
     def put(self, value: Any) -> None:
+        pass
+
+
+    # QUERIES
+
+    # Get data type
+    @abstractmethod
+    def get_type(self) -> type:
         pass
 
 
@@ -135,6 +145,10 @@ class DataNode(OutputData, Status):
 
 
     # QUERIES
+
+    # Get data type
+    def get_type(self) -> type:
+        return self.__type
 
     # Check if data is valid
     def is_valid(self) -> bool:

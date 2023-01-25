@@ -61,8 +61,10 @@ class Test_DataNode(unittest.TestCase):
 
 
     def test_init_no_input(self):
-        d = DataNode(int)
+        d = DataNode(str)
         self.assertTrue(d.is_status("init", "OK"))
+        self.assertIs(d.get_type(), str)
+        self.assertFalse(d.is_valid())
 
 
     def test_init_with_input(self):
@@ -70,12 +72,16 @@ class Test_DataNode(unittest.TestCase):
         d = DataNode(int, i, "a")
         self.assertTrue(d.is_status("init", "OK"))
         self.assertEqual(i.get_log(), [("add_output", d, "a")])
+        self.assertIs(d.get_type(), int)
+        self.assertFalse(d.is_valid())
 
 
     def test_init_with_input_fail(self):
         i = self.InvalidSlotInputProc()
-        d = DataNode(int, i, "a")
+        d = DataNode(float, i, "a")
         self.assertTrue(d.is_status("init", "INVALID_SLOT_NAME"))
+        self.assertIs(d.get_type(), float)
+        self.assertFalse(d.is_valid())
 
 
     def test_put(self):
