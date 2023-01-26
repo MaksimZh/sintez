@@ -1,4 +1,4 @@
-from typing import Any, Optional, Union, final
+from typing import Any, Optional, Union, final, Type
 from abc import abstractmethod
 from tools import Status, status
 
@@ -29,6 +29,11 @@ class InputData(Status):
     @abstractmethod
     @status("OK", "ALREADY_LINKED")
     def add_output(self, output: "OutputProc") -> None:
+        pass
+
+    # Get data type
+    @abstractmethod
+    def get_type(self) -> type:
         pass
 
 
@@ -125,7 +130,7 @@ class OutputProc(Status):
 #     - data (if valid)
 #
 @final
-class DataNode(InputData, OutputData, Status):
+class DataNode(InputData, OutputData):
 
     __input: Optional[InputProc]
     __outputs: set[OutputProc]
@@ -134,7 +139,8 @@ class DataNode(InputData, OutputData, Status):
     __is_valid: bool
 
     # CONSTRUCTOR
-    # PRE: input procedure node accepts connection of `input` to `slot`
+    # PRE: input procedure node accepts connection
+    #      of data with `data_type` type to output `slot`
     # POST: input procedure node is set to `input`
     # POST: if `input` is not None add this node to `input` output slot `slot`
     # POST: no output procedure nodes
@@ -169,8 +175,8 @@ class DataNode(InputData, OutputData, Status):
     # COMMANDS
     
     # Add output procedure
-    # PRE: `output` is not linked to this data inputs or outputs
-    # POST: `output` is added to output procedures
+    # PRE: `output` is not in input or outputs
+    # POST: `output` is added to outputs
     @status("OK", "ALREADY_LINKED")
     def add_output(self, output: "OutputProc") -> None:
         if output is self.__input or output in self.__outputs:
@@ -245,6 +251,126 @@ class DataNode(InputData, OutputData, Status):
             return None
         self._set_status("get", "OK")
         return self.__data
+
+
+# Base class for the internal procedure of ProcedureNode
+# 
+# When the user gets any output value it must be up to date with input values.
+# Procedure implementation must take care of the method statuses.
+#
+# Contains:
+#     - named and typed input values
+#     - named output values 
+#
+class Procedure(Status):
+
+    # CLASS QUERIES
+
+    @classmethod
+    @abstractmethod
+    def get_input_types(cls) -> dict[str, type]:
+        ...
+
+    @classmethod
+    @abstractmethod
+    def create(cls, inputs: dict[str, type]) -> "Procedure":
+        ...
+
+    
+    # COMMANDS
+    
+    # set input value
+    # PRE: name is acceptable
+    # PRE: value type is compatible
+    # POST: input value is set
+    @abstractmethod
+    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    def put(self, name: str, value: Any) -> None:
+        ...
+
+
+    # QUERIES
+
+    # get value
+    # PRE: name is acceptable
+    # PRE: there is enough data to calculate value
+    @abstractmethod
+    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT", "INTERNAL_ERROR")
+    def get(self, name: str) -> Any:
+        ...
+
+
+# Implements procedure node part of calculation scheme logic.
+#
+# Contains:
+#     - input data nodes (any number)
+#     - output data nodes (any number)
+#     - procedure
+#     - input value statuses (new or used)
+#
+@final
+class ProcNode(InputProc, OutputProc):
+
+    __proc: Procedure
+
+
+    # CONSTRUCTOR
+    # PRE: `inputs` fit `proc_type.get_input_types`
+    # POST: `inputs` are connected to input data nodes
+    # POST: no output nodes
+    # POST: create procedure using `proc_type.create`
+    # POST: all inputs are new
+    # POST: send `add_output` command to all inputs
+    @status(
+        "OK",
+        "INCOMPATIBLE_INPUT_SLOTS",
+        "INCOMPATIBLE_INPUT_TYPES",
+        name="init")
+    def __init__(self, proc_type: Type[Procedure],
+            inputs: dict[str, InputData]) -> None:
+        super().__init__()
+        proc_input_types = proc_type.get_input_types()
+        if proc_input_types.keys() != inputs.keys():
+            self._set_status("init", "INCOMPATIBLE_INPUT_SLOTS")
+            return
+        for slot, input in inputs.items():
+            if not _type_fits(input.get_type(), proc_input_types[slot]):
+                self._set_status("init", "INCOMPATIBLE_INPUT_TYPES")
+                return
+        for input in inputs.values():
+            input.add_output(self)
+            assert(input.is_status("add_output", "OK"))
+        self.__proc = proc_type.create(proc_input_types)
+        self._set_status("init", "OK")
+
+    
+    # COMMANDS
+    
+    # Add output data node
+    # PRE: output `slot` for procedure exists and not occupied
+    # PRE: `output` is not in this node inputs or outputs
+    # PRE: `output` type is compatible with `slot`
+    # POST: `output` is linked to this node outputs as `slot`
+    @status()
+    def add_output(self, output: OutputData, slot: str) -> None:
+        pass
+
+    # Request validation of all output data
+    # PRE: inputs can be validated
+    # PRE: procedure can succeed
+    # POST: send values to all outputs with `put` command
+    @status()
+    def validate(self) -> None:
+        pass
+
+    # Inform about input invalidation
+    # PRE: `input` is in procedure inputs
+    @status()
+    def invalidate(self, input: InputData) -> None:
+        pass
+
+
+    # QUERIES
 
 
 # TODO:
@@ -412,7 +538,7 @@ class ValueNode(Status):
 
     # QUERIES
 
-    # get value type
+    # get data type
     def get_type(self) -> type:
         return self.__value_type
 
@@ -447,40 +573,6 @@ class ValueNode(Status):
             return None
         self._set_status("get", "OK")
         return self.__value
-
-
-# Base class for the internal procedure of ProcedureNode
-# 
-# When the user gets any output value it must be up to date with input values.
-# Procedure implementation must take care of the method statuses.
-#
-# Contains:
-#     - named and typed input values
-#     - named output values 
-#
-class Procedure(Status):
-
-    # COMMANDS
-    
-    # set input value
-    # PRE: name is acceptable
-    # PRE: value type is compatible
-    # POST: input value is set
-    @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
-    def put(self, name: str, value: Any) -> None:
-        pass
-
-
-    # QUERIES
-
-    # get value
-    # PRE: name is acceptable
-    # PRE: there is enough data to calculate value
-    @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT", "INTERNAL_ERROR")
-    def get(self, name: str) -> Any:
-        pass
 
 
 # Implements procedure node part of calculation scheme logic.

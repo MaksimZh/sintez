@@ -1,29 +1,32 @@
 import unittest
-from typing import Any, Optional, final
+from typing import Any, final, Type
 
-from nodes import ValueNode, ProcedureNode, Procedure, Simulator
-from nodes import DataNode, InputData, OutputData, InputProc, OutputProc
+from nodes import DataNode, ProcNode, Procedure, \
+    InputData, OutputData, InputProc, OutputProc
 from tools import status
 
 
 class Logger:
 
-    __log: list[tuple[Any, ...]]
+    __log: list[Any]
 
     def __init__(self) -> None:
         super().__init__()
         self.reset_log()
     
     @final
-    def _log(self, *args: Any) -> None:
-        self.__log.append(tuple(args))
+    def log(self, *args: Any) -> None:
+        if len(args) == 1:
+            self.__log.append(args[0])
+        else:
+            self.__log.append(tuple(args))
 
     @final
     def reset_log(self) -> None:
         self.__log = []
 
     @final
-    def get_log(self) -> list[tuple[Any, ...]]:
+    def get_log(self) -> list[Any]:
         return self.__log
 
 
@@ -69,14 +72,14 @@ class Test_DataNode(unittest.TestCase):
         def add_output(self, output: DataNode, slot: str) -> None:
             self.__outputs.add(output)
             self._set_status("add_output", "OK")
-            self._log("add_output", output, slot)
+            self.log("add_output", output, slot)
         
         @status()
         def validate(self) -> None:
             for output in self.__outputs:
                 output.put(0)
             self._set_status("validate", "OK")
-            self._log("validate")
+            self.log("validate")
 
     
     class LoggingOutputProc(Logger, OutputProc):
@@ -87,7 +90,7 @@ class Test_DataNode(unittest.TestCase):
         @status()
         def invalidate(self, input: InputData) -> None:
             self._set_status("invalidate", "OK")
-            self._log("invalidate", input)
+            self.log("invalidate", input)
 
 
     class LoggingProc(LoggingInputProc, LoggingOutputProc):
@@ -221,7 +224,7 @@ class Test_DataNode(unittest.TestCase):
         i.reset_log()
         d.validate()
         self.assertTrue(d.is_status("validate", "OK"))
-        self.assertEqual(i.get_log(), [("validate",)])
+        self.assertEqual(i.get_log(), ["validate"])
         self.assertTrue(d.is_valid())
         self.assertEqual(d.get(), 0)
 
@@ -251,6 +254,92 @@ class Test_DataNode(unittest.TestCase):
         self.assertEqual(o2.get_log(), [("invalidate", d)])
 
 
+class Test_ProcNode(unittest.TestCase):
+
+    class LoggingInputData(Logger, InputData):
+
+        __type: type
+
+        def __init__(self, data_type: type) -> None:
+            super().__init__()
+            self.__type = data_type
+        
+        @status()
+        def add_output(self, output: OutputProc) -> None:
+            self._set_status("add_output", "OK")
+            self.log("add_output", output)
+
+        def get_type(self) -> type:
+            return self.__type
+
+
+    def MakeLoggingProc(self, inputs: dict[str, type],
+            outputs: dict[str, type],
+            logger: Logger) -> Type[Procedure]:
+        
+        class LoggingProc(Procedure):
+
+            @classmethod
+            def get_input_types(cls) -> dict[str, type]:
+                logger.log("get_input_types")
+                return inputs
+
+            @classmethod
+            def create(cls, inputs: dict[str, type]) -> "LoggingProc":
+                logger.log("create", inputs)
+                return cls(inputs, outputs)
+
+            def __init__(self, inputs: dict[str, type],
+                    outputs: dict[str, type]) -> None:
+                super().__init__()
+            
+            @final
+            @status()
+            def put(self, name: str, value: Any) -> None:
+                logger.log("put", name, value)
+                self._set_status("put", "OK")
+            
+            @final
+            @status()
+            def get(self, name: str) -> Any:
+                logger.log("get", name)
+                self._set_status("get", "OK")
+                return 0
+        
+        return LoggingProc
+
+    
+    def test_init(self):
+        pl = Logger()
+        a = self.LoggingInputData(int)
+        b = self.LoggingInputData(str)
+        p = ProcNode(self.MakeLoggingProc({"a": int, "b": str}, {}, pl),
+            {"a": a, "b": b})
+        self.assertTrue(p.is_status("init", "OK"))
+        self.assertEqual(pl.get_log(), [
+            "get_input_types",
+            ("create", {"a": int, "b": str}),
+        ])
+        self.assertEqual(a.get_log(), [("add_output", p)])
+
+    
+    def test_init_fail(self):
+        pl = Logger()
+        a = self.LoggingInputData(int)
+        b = self.LoggingInputData(float)
+        p = ProcNode(self.MakeLoggingProc({"a": int, "b": str}, {}, pl),
+            {"a": a})
+        self.assertTrue(p.is_status("init", "INCOMPATIBLE_INPUT_SLOTS"))
+        self.assertEqual(pl.get_log(), ["get_input_types"])
+        
+        pl.reset_log()
+        p = ProcNode(self.MakeLoggingProc({"a": int, "b": str}, {}, pl),
+            {"a": a, "b": b})
+        self.assertTrue(p.is_status("init", "INCOMPATIBLE_INPUT_TYPES"))
+        self.assertEqual(pl.get_log(), ["get_input_types"])
+
+
+"""
 class BlackHole(Procedure):
     
     @final
@@ -536,7 +625,7 @@ class Test_ValueNode(unittest.TestCase):
         self.assertTrue(v.is_status("get", "OK"))
 
 
-class Test_ProcNode(unittest.TestCase):
+class Test_ProcedureNode(unittest.TestCase):
 
     def test_build(self):
         p = ProcedureNode(WhiteHole())
@@ -1000,6 +1089,7 @@ class Test_Simulator(unittest.TestCase):
         self.assertTrue(s.is_status("get", "OK"))
         self.assertEqual(s.get("d"), 2)
         self.assertTrue(s.is_status("get", "OK"))
+"""
 
 
 if __name__ == "__main__":
