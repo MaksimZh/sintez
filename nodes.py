@@ -89,7 +89,7 @@ class InputProc(Status):
         "SLOT_OCCUPIED",
         "ALREADY_LINKED",
         "INCOMPATIBLE_TYPE")
-    def add_output(self, output: OutputData, slot: str) -> None:
+    def add_output(self, slot: str, output: OutputData) -> None:
         pass
         
     # Request validation of all output data
@@ -258,9 +258,14 @@ class DataNode(InputData, OutputData):
 # When the user gets any output value it must be up to date with input values.
 # Procedure implementation must take care of the method statuses.
 #
+# Types of the input data are checked before procedure creation.
+# Override `get_input_types` class method to provide infomation for type check.
+# Output types are requested once from created class instance
+# with `get_output_types` query.
+#
 # Contains:
 #     - named and typed input values
-#     - named output values 
+#     - named and typed output values 
 #
 class Procedure(Status):
 
@@ -279,7 +284,7 @@ class Procedure(Status):
     
     # COMMANDS
     
-    # set input value
+    # Set input value
     # PRE: name is acceptable
     # PRE: value type is compatible
     # POST: input value is set
@@ -290,6 +295,11 @@ class Procedure(Status):
 
 
     # QUERIES
+
+    # Get names and types of outputs
+    @abstractmethod
+    def get_output_types(self) -> dict[str, type]:
+        ...
 
     # get value
     # PRE: name is acceptable
@@ -312,6 +322,9 @@ class Procedure(Status):
 class ProcNode(InputProc, OutputProc):
 
     __proc: Procedure
+    __output_types: dict[str, type]
+    __inputs: dict[str, InputData]
+    __outputs: dict[str, OutputData]
 
 
     # CONSTRUCTOR
@@ -329,6 +342,8 @@ class ProcNode(InputProc, OutputProc):
     def __init__(self, proc_type: Type[Procedure],
             inputs: dict[str, InputData]) -> None:
         super().__init__()
+        self.__inputs = dict()
+        self.__outputs = dict()
         proc_input_types = proc_type.get_input_types()
         if proc_input_types.keys() != inputs.keys():
             self._set_status("init", "INCOMPATIBLE_INPUT_SLOTS")
@@ -337,10 +352,12 @@ class ProcNode(InputProc, OutputProc):
             if not _type_fits(input.get_type(), proc_input_types[slot]):
                 self._set_status("init", "INCOMPATIBLE_INPUT_TYPES")
                 return
-        for input in inputs.values():
+        for slot, input in inputs.items():
+            self.__inputs[slot] = input
             input.add_output(self)
             assert(input.is_status("add_output", "OK"))
         self.__proc = proc_type.create(proc_input_types)
+        self.__output_types = self.__proc.get_output_types()
         self._set_status("init", "OK")
 
     
@@ -352,8 +369,24 @@ class ProcNode(InputProc, OutputProc):
     # PRE: `output` type is compatible with `slot`
     # POST: `output` is linked to this node outputs as `slot`
     @status()
-    def add_output(self, output: OutputData, slot: str) -> None:
-        pass
+    def add_output(self, slot: str, output: OutputData) -> None:
+        if not slot in self.__output_types:
+            self._set_status("add_output", "INVALID_SLOT_NAME")
+            return
+        if slot in self.__outputs:
+            self._set_status("add_output", "SLOT_OCCUPIED")
+            return
+        if output in self.__inputs.values():
+            self._set_status("add_output", "ALREADY_LINKED")
+            return
+        if output in self.__outputs.values():
+            self._set_status("add_output", "ALREADY_LINKED")
+            return
+        if not _type_fits(self.__output_types[slot], output.get_type()):
+            self._set_status("add_output", "INCOMPATIBLE_TYPE")
+            return
+        self.__outputs[slot] = output
+        self._set_status("add_output", "OK")
 
     # Request validation of all output data
     # PRE: inputs can be validated

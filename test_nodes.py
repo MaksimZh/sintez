@@ -261,7 +261,7 @@ class Test_ProcNode(unittest.TestCase):
         __type: type
 
         def __init__(self, data_type: type) -> None:
-            super().__init__()
+            Logger.__init__(self)
             self.__type = data_type
         
         @status()
@@ -271,6 +271,33 @@ class Test_ProcNode(unittest.TestCase):
 
         def get_type(self) -> type:
             return self.__type
+
+    
+    class LoggingOutputData(Logger, OutputData):
+
+        __type: type
+
+        def __init__(self, data_type: type) -> None:
+            Logger.__init__(self)
+            self.__type = data_type
+        
+        @status()
+        def put(self, value: Any) -> None:
+            self._set_status("put", "OK")
+            self.log("put", value)
+
+        def invalidate(self) -> None:
+            self.log("invalidate")
+
+        def get_type(self) -> type:
+            return self.__type
+
+
+    class LoggingData(LoggingInputData, LoggingOutputData):
+        
+        def __init__(self, data_type: type) -> None:
+            Test_ProcNode.LoggingInputData.__init__(self, data_type)
+            Test_ProcNode.LoggingOutputData.__init__(self, data_type)
 
 
     def MakeLoggingProc(self, inputs: dict[str, type],
@@ -298,6 +325,10 @@ class Test_ProcNode(unittest.TestCase):
             def put(self, name: str, value: Any) -> None:
                 logger.log("put", name, value)
                 self._set_status("put", "OK")
+
+            @final
+            def get_output_types(self) -> dict[str, type]:
+                return outputs
             
             @final
             @status()
@@ -337,6 +368,30 @@ class Test_ProcNode(unittest.TestCase):
             {"a": a, "b": b})
         self.assertTrue(p.is_status("init", "INCOMPATIBLE_INPUT_TYPES"))
         self.assertEqual(pl.get_log(), ["get_input_types"])
+
+
+    def test_add_output(self):
+        i = self.LoggingData(int)
+        pl = Logger()
+        p = ProcNode(self.MakeLoggingProc({"i": int}, {"a": int, "b": str}, pl),
+            {"i": i})
+        a = self.LoggingOutputData(int)
+        b = self.LoggingOutputData(float)
+        self.assertTrue(p.is_status("add_output", "NIL"))
+        p.add_output("a", a)
+        self.assertTrue(p.is_status("add_output", "OK"))
+        p.add_output("foo", b)
+        self.assertTrue(p.is_status("add_output", "INVALID_SLOT_NAME"))
+        p.add_output("i", b)
+        self.assertTrue(p.is_status("add_output", "INVALID_SLOT_NAME"))
+        p.add_output("a", b)
+        self.assertTrue(p.is_status("add_output", "SLOT_OCCUPIED"))
+        p.add_output("b", i)
+        self.assertTrue(p.is_status("add_output", "ALREADY_LINKED"))
+        p.add_output("b", a)
+        self.assertTrue(p.is_status("add_output", "ALREADY_LINKED"))
+        p.add_output("b", b)
+        self.assertTrue(p.is_status("add_output", "INCOMPATIBLE_TYPE"))
 
 
 """
