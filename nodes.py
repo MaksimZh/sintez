@@ -122,7 +122,7 @@ class InputProc(Status):
     # PRE: input data have correct values
     # POST: send data to all outputs with `put` command
     @abstractmethod
-    @status("OK", "INPUT_VALIDATION_FAIL", "INVALID_INPUT_VALUES")
+    @status("OK", "INPUT_VALIDATION_FAIL", "INVALID_INPUT_VALUE")
     def validate(self) -> None:
         assert False
 
@@ -315,6 +315,7 @@ class Procedure(Status):
     # Set input value
     # PRE: `name` is input slot
     # PRE: `value` type is compatible
+    # PRE: `value` is valid (fits procedure logic)
     # POST: input value is set
     @abstractmethod
     @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INVALID_VALUE")
@@ -333,7 +334,7 @@ class Procedure(Status):
     # PRE: `name` is output slot
     # PRE: there is enough data to calculate value
     @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT", "INVALID_INPUT")
+    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT")
     def get(self, name: str) -> Any:
         assert False
 
@@ -447,19 +448,26 @@ class ProcNode(InputProc, OutputProc):
     def validate(self) -> None:
         for input in self.__new_inputs:
             input.validate()
+            if not input.is_status("validate", "OK"):
+                self._set_status("validate", "INPUT_VALIDATION_FAIL")
+                return
         for slot, input in self.__inputs.items():
             if input not in self.__new_inputs:
                 continue
+            assert(input.is_valid())
             data = input.get()
             self.__proc.put(slot, data)
+            if self.__proc.is_status("put", "INVALID_VALUE"):
+                self._set_status("validate", "INVALID_INPUT_VALUE")
+                return
+            assert(self.__proc.is_status("put", "OK"))
             self.__new_inputs.remove(input)
         for slot, output in self.__outputs.items():
             data = self.__proc.get(slot)
+            assert(self.__proc.is_status("get", "OK"))
             output.put(data)
+            assert(output.is_status("put", "OK"))
         self._set_status("validate", "OK")
-
-
-    # QUERIES
 
 
 # TODO:
