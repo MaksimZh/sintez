@@ -443,7 +443,8 @@ class ProcNode(InputProc, OutputProc):
     # Request validation of all output data
     # PRE: inputs can be validated
     # PRE: input data are correct for procedure
-    # PRE: procedure is valid
+    # PRE: procedure accepts input data of types given by `get_input_types`
+    # PRE: procedure provides output data of types given by `get_output_types`
     # POST: send `validate`` command to all inputs
     # POST: obtain data from new inputs with `get` query
     # POST: send data from new inputs to procedure with `put` command
