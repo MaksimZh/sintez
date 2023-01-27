@@ -192,6 +192,19 @@ class Test_DataNode(unittest.TestCase):
         self.assertTrue(d.is_valid())
 
 
+    def test_validate_with_input(self):
+        i = self.LoggingInputProc()
+        d = DataNode(int, i, "a")
+        self.assertTrue(d.is_status("validate", "NIL"))
+        self.assertFalse(d.is_valid())
+        i.reset_log()
+        d.validate()
+        self.assertTrue(d.is_status("validate", "OK"))
+        self.assertEqual(i.get_log(), ["validate"])
+        self.assertTrue(d.is_valid())
+        self.assertEqual(d.get(), 0)
+
+
     def test_validate_with_input_fail(self):
         i = self.FailingInputProc("OK", "INPUT_VALIDATION_FAIL")
         d = DataNode(int, i, "a")
@@ -205,19 +218,6 @@ class Test_DataNode(unittest.TestCase):
         d.validate()
         self.assertTrue(d.is_status("validate", "OK"))
         self.assertTrue(d.is_valid())
-
-
-    def test_validate_with_input(self):
-        i = self.LoggingInputProc()
-        d = DataNode(int, i, "a")
-        self.assertTrue(d.is_status("validate", "NIL"))
-        self.assertFalse(d.is_valid())
-        i.reset_log()
-        d.validate()
-        self.assertTrue(d.is_status("validate", "OK"))
-        self.assertEqual(i.get_log(), ["validate"])
-        self.assertTrue(d.is_valid())
-        self.assertEqual(d.get(), 0)
 
 
     def test_invalidate(self):
@@ -328,6 +328,25 @@ class Test_ProcNode(unittest.TestCase):
             return self.__type
 
 
+    class FailingOutputData(OutputData):
+
+        __type: type
+
+        def __init__(self, data_type: type) -> None:
+            super().__init__()
+            self.__type = data_type
+        
+        @status()
+        def put(self, value: Any) -> None:
+            self._set_status("put", "INCOMPATIBLE_TYPE")
+
+        def invalidate(self) -> None:
+            pass
+
+        def get_type(self) -> type:
+            return self.__type
+
+
     class LoggingData(LoggingInputData, LoggingOutputData):
         
         def __init__(self, data_type: type) -> None:
@@ -376,7 +395,7 @@ class Test_ProcNode(unittest.TestCase):
 
     def MakeFailingProc(self, inputs: dict[str, type],
             outputs: dict[str, type],
-            put_status: str) -> Type[Procedure]:
+            put_status: str, get_status: str) -> Type[Procedure]:
         
         class FailingProc(Procedure):
 
@@ -404,7 +423,7 @@ class Test_ProcNode(unittest.TestCase):
             @final
             @status()
             def get(self, name: str) -> Any:
-                self._set_status("get", "OK")
+                self._set_status("get", get_status)
                 return 0
         
         return FailingProc
@@ -578,10 +597,10 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(d.get_log(), [])
 
 
-    def test_validate_proc_fail(self):
+    def test_validate_proc_value_fail(self):
         a = self.LoggingInputData(int)
         p = ProcNode(self.MakeFailingProc({"a": int}, {"c": int, "d": int},
-                "INVALID_VALUE"),
+                "INVALID_VALUE", "OK"),
             {"a": a})
         c = self.LoggingOutputData(int)
         d = self.LoggingOutputData(int)
@@ -597,6 +616,43 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(c.get_log(), [])
         self.assertEqual(d.get_log(), [])
 
+
+    def test_validate_proc_fail(self):
+        for status in [
+                ("INVALID_NAME", "OK"),
+                ("INCOMPATIBLE_TYPE", "OK"),
+                ("OK", "INVALID_NAME"),
+                ("OK", "INCOMPLETE_INPUT"),
+                ]:
+            a = self.LoggingInputData(int)
+            p = ProcNode(self.MakeFailingProc({"a": int}, {"c": int, "d": int},
+                    *status),
+                {"a": a})
+            c = self.LoggingOutputData(int)
+            d = self.LoggingOutputData(int)
+            p.add_output("c", c)
+            p.add_output("d", d)
+            a.reset_log()
+            c.reset_log()
+            d.reset_log()
+            self.assertTrue(p.is_status("validate", "NIL"))
+            p.validate()
+            self.assertTrue(p.is_status("validate", "INVALID_PROCEDURE"))
+            self.assertEqual(a.get_log(), ["validate", "get"])
+            self.assertEqual(c.get_log(), [])
+            self.assertEqual(d.get_log(), [])
+
+    
+    def test_validate_proc_output_fail(self):
+        pl = Logger()
+        p = ProcNode(self.MakeLoggingProc({}, {"a": int}, pl), {})
+        a = self.FailingOutputData(int)
+        p.add_output("a", a)
+        pl.reset_log()
+        self.assertTrue(p.is_status("validate", "NIL"))
+        p.validate()
+        self.assertTrue(p.is_status("validate", "INVALID_PROCEDURE"))
+        self.assertEqual(pl.get_log(), [("get", "a")])
 
 
 """

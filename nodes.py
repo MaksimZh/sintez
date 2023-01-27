@@ -122,7 +122,10 @@ class InputProc(Status):
     # PRE: input data have correct values
     # POST: send data to all outputs with `put` command
     @abstractmethod
-    @status("OK", "INPUT_VALIDATION_FAIL", "INVALID_INPUT_VALUE")
+    @status("OK",
+        "INPUT_VALIDATION_FAIL",
+        "INVALID_INPUT_VALUE",
+        "INVALID_PROCEDURE")
     def validate(self) -> None:
         assert False
 
@@ -440,6 +443,7 @@ class ProcNode(InputProc, OutputProc):
     # Request validation of all output data
     # PRE: inputs can be validated
     # PRE: input data are correct for procedure
+    # PRE: procedure is valid
     # POST: send `validate`` command to all inputs
     # POST: obtain data from new inputs with `get` query
     # POST: send data from new inputs to procedure with `put` command
@@ -460,13 +464,19 @@ class ProcNode(InputProc, OutputProc):
             if self.__proc.is_status("put", "INVALID_VALUE"):
                 self._set_status("validate", "INVALID_INPUT_VALUE")
                 return
-            assert(self.__proc.is_status("put", "OK"))
+            if not self.__proc.is_status("put", "OK"):
+                self._set_status("validate", "INVALID_PROCEDURE")
+                return
             self.__new_inputs.remove(input)
         for slot, output in self.__outputs.items():
             data = self.__proc.get(slot)
-            assert(self.__proc.is_status("get", "OK"))
+            if not self.__proc.is_status("get", "OK"):
+                self._set_status("validate", "INVALID_PROCEDURE")
+                return
             output.put(data)
-            assert(output.is_status("put", "OK"))
+            if not output.is_status("put", "OK"):
+                self._set_status("validate", "INVALID_PROCEDURE")
+                return
         self._set_status("validate", "OK")
 
 
