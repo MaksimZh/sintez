@@ -336,6 +336,7 @@ class ProcNode(InputProc, OutputProc):
     # POST: send `add_output` command to all inputs
     @status(
         "OK",
+        "INCOMPLETE_INPUT",
         "INCOMPATIBLE_INPUT_SLOTS",
         "INCOMPATIBLE_INPUT_TYPES",
         name="init")
@@ -345,6 +346,9 @@ class ProcNode(InputProc, OutputProc):
         self.__inputs = dict()
         self.__outputs = dict()
         proc_input_types = proc_type.get_input_types()
+        if proc_input_types.keys() > inputs.keys():
+            self._set_status("init", "INCOMPLETE_INPUT")
+            return
         if proc_input_types.keys() != inputs.keys():
             self._set_status("init", "INCOMPATIBLE_INPUT_SLOTS")
             return
@@ -394,7 +398,7 @@ class ProcNode(InputProc, OutputProc):
     # POST: send values to all outputs with `put` command
     @status()
     def validate(self) -> None:
-        pass
+        self._set_status("validate", "OK")
 
     # Inform about input invalidation
     # PRE: `input` is in procedure inputs

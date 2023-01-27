@@ -359,7 +359,7 @@ class Test_ProcNode(unittest.TestCase):
         a = self.LoggingInputData(int)
         b = self.LoggingInputData(float)
         p = ProcNode(self.MakeLoggingProc({"a": int, "b": str}, {}, pl),
-            {"a": a})
+            {"a": a, "c": b})
         self.assertTrue(p.is_status("init", "INCOMPATIBLE_INPUT_SLOTS"))
         self.assertEqual(pl.get_log(), ["get_input_types"])
         
@@ -367,6 +367,12 @@ class Test_ProcNode(unittest.TestCase):
         p = ProcNode(self.MakeLoggingProc({"a": int, "b": str}, {}, pl),
             {"a": a, "b": b})
         self.assertTrue(p.is_status("init", "INCOMPATIBLE_INPUT_TYPES"))
+        self.assertEqual(pl.get_log(), ["get_input_types"])
+
+        pl.reset_log()
+        p = ProcNode(self.MakeLoggingProc({"a": int, "b": str}, {}, pl),
+            {"a": a})
+        self.assertTrue(p.is_status("init", "INCOMPLETE_INPUT"))
         self.assertEqual(pl.get_log(), ["get_input_types"])
 
 
@@ -392,6 +398,14 @@ class Test_ProcNode(unittest.TestCase):
         self.assertTrue(p.is_status("add_output", "ALREADY_LINKED"))
         p.add_output("b", b)
         self.assertTrue(p.is_status("add_output", "INCOMPATIBLE_TYPE"))
+
+
+    def test_validate(self):
+        pl = Logger()
+        p = ProcNode(self.MakeLoggingProc({}, {"a": int, "b": int}, pl), {})
+        self.assertTrue(p.is_status("validate", "NIL"))
+        p.validate()
+        self.assertTrue(p.is_status("validate", "OK"))
 
 
 """
