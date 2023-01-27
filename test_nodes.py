@@ -440,6 +440,20 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(c.get_log(), [("put", 0)])
         self.assertEqual(d.get_log(), [("put", 0)])
 
+        a.reset_log()
+        b.reset_log()
+        c.reset_log()
+        d.reset_log()
+        pl.reset_log()
+        p.validate()
+        self.assertTrue(p.is_status("validate", "OK"))
+        self.assertEqual(a.get_log(), [])
+        self.assertEqual(b.get_log(), [])
+        self.assertEqual(set(pl.get_log()),
+            {("get", "c"), ("get", "d")})
+        self.assertEqual(c.get_log(), [("put", 0)])
+        self.assertEqual(d.get_log(), [("put", 0)])
+
 
 """
 class BlackHole(Procedure):

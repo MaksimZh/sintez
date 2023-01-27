@@ -341,6 +341,7 @@ class ProcNode(InputProc, OutputProc):
     __output_types: dict[str, type]
     __inputs: dict[str, InputData]
     __outputs: dict[str, OutputData]
+    __new_inputs: set[InputData]
 
 
     # CONSTRUCTOR
@@ -376,6 +377,7 @@ class ProcNode(InputProc, OutputProc):
             self.__inputs[slot] = input
             input.add_output(self)
             assert(input.is_status("add_output", "OK"))
+        self.__new_inputs = set(self.__inputs.values())
         self.__proc = proc_type.create(proc_input_types)
         self.__output_types = self.__proc.get_output_types()
         self._set_status("init", "OK")
@@ -417,11 +419,14 @@ class ProcNode(InputProc, OutputProc):
     # POST: send data to all outputs with `put` command
     @status()
     def validate(self) -> None:
-        for input in self.__inputs.values():
+        for input in self.__new_inputs:
             input.validate()
         for slot, input in self.__inputs.items():
+            if input not in self.__new_inputs:
+                continue
             data = input.get()
             self.__proc.put(slot, data)
+            self.__new_inputs.remove(input)
         for slot, output in self.__outputs.items():
             data = self.__proc.get(slot)
             output.put(data)
