@@ -16,7 +16,7 @@ from tools import Status, status
 #
 # Contains:
 #     - output procedures
-#     - other linked procedures
+#     - input procedure
 #     - data type
 #     - data status (valid or not)
 #     - data (if valid, read only)
@@ -26,15 +26,18 @@ class InputData(Status):
     # COMMANDS
     
     # Add output procedure
-    # PRE: `output` is not linked to this data in any way
-    # POST: `output` is added to output procedures
+    # PRE: `output` is not in this data input or outputs
+    # POST: `output` is added to outputs
     @abstractmethod
     @status("OK", "ALREADY_LINKED")
     def add_output(self, output: "OutputProc") -> None:
         assert False
 
+    # Make sure data is valid
+    # PRE: data is valid or input procedure can be validated
+    # POST: data is valid
     @abstractmethod
-    @status("OK", "NO_INPUT", "INPUT_FAILED")
+    @status("OK", "NO_INPUT", "INPUT_VALIDATION_FAIL")
     def validate(self, output: "OutputProc") -> None:
         assert False
 
@@ -46,7 +49,13 @@ class InputData(Status):
     def get_type(self) -> type:
         assert False
 
+    # Check if data is valid
+    @abstractmethod
+    def is_valid(self) -> bool:
+        assert False
+
     # Get data
+    # PRE: data is valid
     @abstractmethod
     @status("OK", "INVALID_DATA")
     def get(self) -> Any:
@@ -89,14 +98,14 @@ class OutputData(Status):
 #
 # Contains:
 #     - output data nodes at named slots
-#     - other linked data nodes
+#     - input data nodes
 #     - procedure
 #
 class InputProc(Status):
     
     # Add output data node
     # PRE: `slot` exists and not occupied
-    # PRE: `output` is not linked to this data input in any way
+    # PRE: `output` is not in inputs or outputs
     # PRE: `output` type is compatible with `slot`
     # POST: `output` is linked to this data input as `slot`
     @abstractmethod
@@ -109,10 +118,11 @@ class InputProc(Status):
         assert False
         
     # Request validation of all output data
-    # PRE: procedure can succeed
-    # POST: send values to all outputs with `put` command
+    # PRE: input data can be validated
+    # PRE: input data have correct values
+    # POST: send data to all outputs with `put` command
     @abstractmethod
-    @status("OK", "INTERNAL_ERROR")
+    @status("OK", "INPUT_VALIDATION_FAIL", "INVALID_INPUT_VALUES")
     def validate(self) -> None:
         assert False
 
@@ -193,7 +203,7 @@ class DataNode(InputData, OutputData):
     # Add output procedure
     # PRE: `output` is not in input or outputs
     # POST: `output` is added to outputs
-    @status("OK", "ALREADY_LINKED")
+    @status()
     def add_output(self, output: "OutputProc") -> None:
         if output is self.__input or output in self.__outputs:
             self._set_status("add_output", "ALREADY_LINKED")
@@ -230,7 +240,7 @@ class DataNode(InputData, OutputData):
             output.invalidate(self)
 
     # Make sure data is valid
-    # PRE: data is valid or node has input that can put data
+    # PRE: data is valid or input procedure can be validated
     # POST: if data is invalid then send `validate` command to input
     # POST: data is valid
     @status()
@@ -243,7 +253,7 @@ class DataNode(InputData, OutputData):
             return
         self.__input.validate()
         if not self.__input.is_status("validate", "OK"):
-            self._set_status("validate", "INPUT_FAILED")
+            self._set_status("validate", "INPUT_VALIDATION_FAIL")
             return
         self._set_status("validate", "OK")
 
@@ -287,11 +297,13 @@ class Procedure(Status):
 
     # CLASS QUERIES
 
+    # Get names and types of input data slots
     @classmethod
     @abstractmethod
     def get_input_types(cls) -> dict[str, type]:
         assert False
 
+    # Create procedure for given input types that are subtypes of the slot types
     @classmethod
     @abstractmethod
     def create(cls, inputs: dict[str, type]) -> "Procedure":
@@ -301,11 +313,11 @@ class Procedure(Status):
     # COMMANDS
     
     # Set input value
-    # PRE: name is acceptable
-    # PRE: value type is compatible
+    # PRE: `name` is input slot
+    # PRE: `value` type is compatible
     # POST: input value is set
     @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INTERNAL_ERROR")
+    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INVALID_VALUE")
     def put(self, name: str, value: Any) -> None:
         assert False
 
@@ -318,10 +330,10 @@ class Procedure(Status):
         assert False
 
     # get value
-    # PRE: name is acceptable
+    # PRE: `name` is output slot
     # PRE: there is enough data to calculate value
     @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT", "INTERNAL_ERROR")
+    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT", "INVALID_INPUT")
     def get(self, name: str) -> Any:
         assert False
 
@@ -346,7 +358,7 @@ class ProcNode(InputProc, OutputProc):
 
     # CONSTRUCTOR
     # PRE: `inputs` fit `proc_type.get_input_types`
-    # POST: `inputs` are connected to input data nodes
+    # POST: `inputs` are connected to input slots
     # POST: no output nodes
     # POST: create procedure using `proc_type.create`
     # POST: all inputs are new
@@ -410,9 +422,15 @@ class ProcNode(InputProc, OutputProc):
         self.__outputs[slot] = output
         self._set_status("add_output", "OK")
 
+    # Inform about input invalidation
+    # PRE: `input` is in procedure inputs
+    @status()
+    def invalidate(self, input: InputData) -> None:
+        assert False
+
     # Request validation of all output data
     # PRE: inputs can be validated
-    # PRE: procedure can succeed
+    # PRE: input data are correct for procedure
     # POST: send `validate`` command to all inputs
     # POST: obtain data from new inputs with `get` query
     # POST: send data from new inputs to procedure with `put` command
@@ -431,12 +449,6 @@ class ProcNode(InputProc, OutputProc):
             data = self.__proc.get(slot)
             output.put(data)
         self._set_status("validate", "OK")
-
-    # Inform about input invalidation
-    # PRE: `input` is in procedure inputs
-    @status()
-    def invalidate(self, input: InputData) -> None:
-        assert False
 
 
     # QUERIES
