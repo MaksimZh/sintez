@@ -215,7 +215,7 @@ class DataNode(InputData, OutputData):
     # PRE: `value` type can be implicitly converted to data type
     # POST: data is valid
     # POST: data is set to `value`
-    # POST: is data was valid send `invalidate` command to all outputs
+    # POST: if data was valid send `invalidate` command to all outputs
     @status()
     def put(self, value: Any) -> None:
         if not _type_fits(type(value), self.__type):
@@ -424,9 +424,17 @@ class ProcNode(InputProc, OutputProc):
 
     # Inform about input invalidation
     # PRE: `input` is in procedure inputs
+    # POST: mark `input` as new
+    # POST: send `invalidate` command to all outputs
     @status()
     def invalidate(self, input: InputData) -> None:
-        assert False
+        if input not in self.__inputs.values():
+            self._set_status("invalidate", "NOT_INPUT")
+            return
+        self.__new_inputs.add(input)
+        self._set_status("invalidate", "OK")
+        for output in self.__outputs.values():
+            output.invalidate()
 
     # Request validation of all output data
     # PRE: inputs can be validated

@@ -407,6 +407,34 @@ class Test_ProcNode(unittest.TestCase):
         self.assertTrue(p.is_status("add_output", "INCOMPATIBLE_TYPE"))
 
 
+    def test_invalidate(self):
+        a = self.LoggingInputData(int)
+        b = self.LoggingInputData(int)
+        pl = Logger()
+        p = ProcNode(self.MakeLoggingProc(
+            {"a": int}, {"c": int, "d": int}, pl),
+            {"a": a})
+        c = self.LoggingOutputData(int)
+        d = self.LoggingOutputData(int)
+        p.add_output("c", c)
+        p.add_output("d", d)
+        c.reset_log()
+        d.reset_log()
+        pl.reset_log()
+        self.assertTrue(p.is_status("invalidate", "NIL"))
+        p.invalidate(b)
+        self.assertTrue(p.is_status("invalidate", "NOT_INPUT"))
+        self.assertEqual(pl.get_log(), [])
+        self.assertEqual(c.get_log(), [])
+        self.assertEqual(d.get_log(), [])
+        p.invalidate(a)
+        self.assertTrue(p.is_status("invalidate", "OK"))
+        self.assertEqual(pl.get_log(), [])
+        self.assertEqual(c.get_log(), ["invalidate"])
+        self.assertEqual(d.get_log(), ["invalidate"])
+
+
+
     def test_validate(self):
         a = self.LoggingInputData(int)
         b = self.LoggingInputData(int)
@@ -445,6 +473,22 @@ class Test_ProcNode(unittest.TestCase):
         self.assertEqual(a.get_log(), [])
         self.assertEqual(b.get_log(), [])
         self.assertEqual(set(pl.get_log()),
+            {("get", "c"), ("get", "d")})
+        self.assertEqual(c.get_log(), [("put", 0)])
+        self.assertEqual(d.get_log(), [("put", 0)])
+
+        p.invalidate(a)
+        a.reset_log()
+        b.reset_log()
+        c.reset_log()
+        d.reset_log()
+        pl.reset_log()
+        p.validate()
+        self.assertTrue(p.is_status("validate", "OK"))
+        self.assertEqual(a.get_log(), ["validate", "get"])
+        self.assertEqual(b.get_log(), [])
+        self.assertEqual(pl.get_log()[0], ("put", "a", 0))
+        self.assertEqual(set(pl.get_log()[1:]),
             {("get", "c"), ("get", "d")})
         self.assertEqual(c.get_log(), [("put", 0)])
         self.assertEqual(d.get_log(), [("put", 0)])
