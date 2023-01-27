@@ -269,8 +269,19 @@ class Test_ProcNode(unittest.TestCase):
             self._set_status("add_output", "OK")
             self.log("add_output", output)
 
+        @status()
+        def validate(self) -> None:
+            self._set_status("validate", "OK")
+            self.log("validate")
+
         def get_type(self) -> type:
             return self.__type
+
+        @status()
+        def get(self) -> Any:
+            self._set_status("get", "OK")
+            self.log("get")
+            return 0
 
     
     class LoggingOutputData(Logger, OutputData):
@@ -352,6 +363,7 @@ class Test_ProcNode(unittest.TestCase):
             ("create", {"a": int, "b": str}),
         ])
         self.assertEqual(a.get_log(), [("add_output", p)])
+        self.assertEqual(b.get_log(), [("add_output", p)])
 
     
     def test_init_fail(self):
@@ -401,11 +413,32 @@ class Test_ProcNode(unittest.TestCase):
 
 
     def test_validate(self):
+        a = self.LoggingInputData(int)
+        b = self.LoggingInputData(int)
         pl = Logger()
-        p = ProcNode(self.MakeLoggingProc({}, {"a": int, "b": int}, pl), {})
+        p = ProcNode(self.MakeLoggingProc(
+            {"a": int, "b": int}, {"c": int, "d": int}, pl),
+            {"a": a, "b": b})
+        c = self.LoggingOutputData(int)
+        d = self.LoggingOutputData(int)
+        p.add_output("c", c)
+        p.add_output("d", d)
+        a.reset_log()
+        b.reset_log()
+        c.reset_log()
+        d.reset_log()
+        pl.reset_log()
         self.assertTrue(p.is_status("validate", "NIL"))
         p.validate()
         self.assertTrue(p.is_status("validate", "OK"))
+        self.assertEqual(a.get_log(), ["validate", "get"])
+        self.assertEqual(b.get_log(), ["validate", "get"])
+        self.assertEqual(set(pl.get_log()[:2]),
+            {("put", "a", 0), ("put", "b", 0)})
+        self.assertEqual(set(pl.get_log()[2:]),
+            {("get", "c"), ("get", "d")})
+        self.assertEqual(c.get_log(), [("put", 0)])
+        self.assertEqual(d.get_log(), [("put", 0)])
 
 
 """
