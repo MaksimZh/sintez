@@ -481,6 +481,13 @@ class ProcNode(InputProc, OutputProc):
         self._set_status("validate", "OK")
 
 
+    # QUERIES
+
+    # Get types of procedure outputs
+    def get_output_types(self) -> dict[str, type]:
+        return self.__output_types
+
+
 # TODO:
 # DEPRECATED:
 
