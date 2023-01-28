@@ -1,8 +1,9 @@
 import unittest
 from typing import Any, final, Type
 
-from nodes import DataNode, ProcNode, Procedure, \
-    InputData, OutputData, InputProc, OutputProc
+from nodes import DataNode, ProcNode, \
+    InputData, OutputData, InputProc, OutputProc, \
+    Procedure, SimpleProc
 from tools import status
 
 
@@ -366,7 +367,7 @@ class Test_ProcNode(unittest.TestCase):
                 return inputs
 
             @classmethod
-            def create(cls, inputs: dict[str, type]) -> "LoggingProc":
+            def create(cls, input_types: dict[str, type]) -> "LoggingProc":
                 logger.log("create", inputs)
                 return cls(inputs, outputs)
 
@@ -405,7 +406,7 @@ class Test_ProcNode(unittest.TestCase):
                 return inputs
 
             @classmethod
-            def create(cls, inputs: dict[str, type]) -> "FailingProc":
+            def create(cls, input_types: dict[str, type]) -> "FailingProc":
                 return cls(inputs, outputs)
 
             def __init__(self, inputs: dict[str, type],
@@ -642,59 +643,27 @@ class Test_ProcNode(unittest.TestCase):
         self.assertTrue(p.is_status("validate", "INVALID_PROCEDURE"))
 
 
+class Divmod(SimpleProc):
+    
+    INPUTS = ["left", "right"]
+    OUTPUTS = ["quotient", "remainder"]
+    __left: int
+    __right: int
+    __quotient: int
+    __remainder: int
+
+    def run(self) -> None:
+        self.__quotient, self.__remainder = divmod(self.__left, self.__right)
+
+
+class Test_autoproc(unittest.TestCase):
+    
+    def test(self):
+        self.assertEqual(Divmod.get_input_types(), {"left": int, "right": int})
+        dm = Divmod.create({"left": int, "right": int})
+
+
 """
-class Divmod(Procedure):
-    
-    __left: Optional[int]
-    __right: Optional[int]
-    __need_calculate: bool
-    __quotient: Optional[int]
-    __remainder: Optional[int]
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.__left = None
-        self.__right = None
-        self.__quotient = None
-        self.__remainder = None
-        self.__need_calculate = True
-
-    @final
-    @status()
-    def put(self, name: str, value: Any) -> None:
-        if type(value) is not int:
-            self._set_status("put", "INCOMPATIBLE_TYPE")
-            return
-        self.__need_calculate = True
-        match name:
-            case "left":
-                self.__left = value
-                self._set_status("put", "OK")
-            case "right":
-                self.__right = value
-                self._set_status("put", "OK")
-            case _:
-                self._set_status("put", "INVALID_NAME")
-    
-    @final
-    @status()
-    def get(self, name: str) -> Any:
-        if self.__left is None or self.__right is None:
-            self._set_status("get", "INCOMPLETE_INPUT")
-            return None
-        if self.__need_calculate:
-            self.__quotient, self.__remainder = divmod(self.__left, self.__right)
-        match name:
-            case "quotient":
-                self._set_status("get", "OK")
-                return self.__quotient
-            case "remainder":
-                self._set_status("get", "OK")
-                return self.__remainder
-            case _:
-                self._set_status("get", "INVALID_NAME")
-                return None
-
 class Test_Nodes(unittest.TestCase):
 
     def test_single(self):

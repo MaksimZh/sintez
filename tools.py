@@ -54,7 +54,7 @@ def status(*args: str, **kwargs: str) -> Callable[[AnyFunc], AnyFunc]:
 #
 class StatusMeta(ABCMeta):
     def __new__(cls, class_name: str, bases: tuple[type, ...],
-            namespace: dict[str, Any], **kwargs: Any) -> "StatusMeta":
+            namespace: dict[str, Any], **kwargs: Any) -> type:
         parent_statuses = set[str]()
         all_status_values = dict[str, set[str]]()
         for base in bases:

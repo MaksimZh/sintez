@@ -1,6 +1,6 @@
 from typing import Any, Optional, final, Type
 from abc import abstractmethod
-from tools import Status, status
+from tools import Status, status, StatusMeta
 
 # Nodes implement the calculation scheme logic.
 #
@@ -313,7 +313,7 @@ class Procedure(Status):
     # Create procedure for given input types that are subtypes of the slot types
     @classmethod
     @abstractmethod
-    def create(cls, inputs: dict[str, type]) -> "Procedure":
+    def create(cls, input_types: dict[str, type]) -> "Procedure":
         assert False
 
     
@@ -488,6 +488,76 @@ class ProcNode(InputProc, OutputProc):
     # Get types of procedure outputs
     def get_output_types(self) -> dict[str, type]:
         return self.__output_types
+
+
+class SimpleProcMeta(StatusMeta):
+    def __new__(cls, class_name: str, bases: tuple[type, ...],
+            namespace: dict[str, Any], **kwargs: Any) -> type:
+        input_types = cls._get_field_types(class_name, namespace, "INPUTS")
+        namespace["__input_types"] = input_types
+        return super().__new__(cls, class_name, bases, namespace, **kwargs)
+
+    @staticmethod
+    def _get_field_types(class_name: str, namespace: dict[str, Any], key: str
+            ) -> dict[str, type]:
+        if "__annotations__" not in namespace or key not in namespace:
+            return dict[str, type]()
+        annotations = namespace["__annotations__"]
+        types = dict[str, type]()
+        for slot in namespace["INPUTS"]:
+            if slot in annotations:
+                types[slot] = annotations[slot]
+                continue
+            protected_field = f"_{slot}"
+            if protected_field in annotations:
+                types[slot] = annotations[protected_field]
+                continue
+            private_field = f"_{class_name}__{slot}"
+            if private_field in annotations:
+                types[slot] = annotations[private_field]
+                continue
+        return types
+
+
+class SimpleProc(Procedure, metaclass=SimpleProcMeta):
+    
+    # CLASS QUERIES
+
+    # Get names and types of input data slots
+    @classmethod
+    def get_input_types(cls) -> dict[str, type]:
+        return getattr(cls, "__input_types")
+
+    # Create procedure for given input types that are subtypes of the slot types
+    @classmethod
+    def create(cls, input_types: dict[str, type]) -> Procedure:
+        return cls()
+
+    
+    # COMMANDS
+    
+    # Set input value
+    # PRE: `slot` is input slot
+    # PRE: `value` type is compatible
+    # PRE: `value` is valid (fits procedure logic)
+    # POST: input data in `slot` is set to `value`
+    @status()
+    def put(self, slot: str, value: Any) -> None:
+        assert False
+
+
+    # QUERIES
+
+    # Get names and types of outputs
+    def get_output_types(self) -> dict[str, type]:
+        assert False
+
+    # get value
+    # PRE: `slot` is output slot
+    # PRE: there is enough input data for calculation
+    @status()
+    def get(self, slot: str) -> Any:
+        assert False
 
 
 def _type_fits(t: type, required: type) -> bool:
