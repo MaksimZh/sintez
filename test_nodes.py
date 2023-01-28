@@ -611,9 +611,9 @@ class Test_ProcNode(unittest.TestCase):
 
     def test_validate_proc_fail(self):
         for status in [
-                ("INVALID_NAME", "OK"),
+                ("INVALID_SLOT", "OK"),
                 ("INCOMPATIBLE_TYPE", "OK"),
-                ("OK", "INVALID_NAME"),
+                ("OK", "INVALID_SLOT"),
                 ("OK", "INCOMPLETE_INPUT"),
                 ]:
             a = self.LoggingInputData(int)
@@ -652,6 +652,9 @@ class Divmod(SimpleProc):
     __quotient: int
     __remainder: int
 
+    def _is_valid_value(self, slot: str) -> bool:
+        return True
+
     def run(self) -> None:
         self.__quotient, self.__remainder = divmod(self.__left, self.__right)
 
@@ -661,6 +664,15 @@ class Test_autoproc(unittest.TestCase):
     def test(self):
         self.assertEqual(Divmod.get_input_types(), {"left": int, "right": int})
         dm = Divmod.create({"left": int, "right": int})
+        self.assertEqual(dm.get_output_types(), {"quotient": int, "remainder": int})
+        dm.put("left", 101)
+        self.assertTrue(dm.is_status("put", "OK"))
+        dm.put("right", 7)
+        self.assertTrue(dm.is_status("put", "OK"))
+        self.assertEqual(dm.get("quotient"), 14)
+        self.assertTrue(dm.is_status("get", "OK"))
+        self.assertEqual(dm.get("remainder"), 3)
+        self.assertTrue(dm.is_status("get", "OK"))
 
 
 """
@@ -894,9 +906,9 @@ class Test_Simulator(unittest.TestCase):
         s.put("a", 1)
         self.assertTrue(s.is_status("put", "OK"))
         s.put("foo", 1)
-        self.assertTrue(s.is_status("put", "INVALID_NAME"))
+        self.assertTrue(s.is_status("put", "INVALID_SLOT"))
         s.put("c", 1)
-        self.assertTrue(s.is_status("put", "INVALID_NAME"))
+        self.assertTrue(s.is_status("put", "INVALID_SLOT"))
 
 
     def test_get(self):
@@ -923,7 +935,7 @@ class Test_Simulator(unittest.TestCase):
         self.assertTrue(s.is_status("init", "OK"))
         self.assertTrue(s.is_status("get", "NIL"))
         s.get("foo")
-        self.assertTrue(s.is_status("get", "INVALID_NAME"))
+        self.assertTrue(s.is_status("get", "INVALID_SLOT"))
         s.get("e")
         self.assertTrue(s.is_status("get", "INCOMPLETE_INPUT"))
         s.put("a", 101)

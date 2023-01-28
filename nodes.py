@@ -325,7 +325,7 @@ class Procedure(Status):
     # PRE: `value` is valid (fits procedure logic)
     # POST: input data in `slot` is set to `value`
     @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPATIBLE_TYPE", "INVALID_VALUE")
+    @status("OK", "INVALID_SLOT", "INCOMPATIBLE_TYPE", "INVALID_VALUE")
     def put(self, slot: str, value: Any) -> None:
         assert False
 
@@ -341,7 +341,7 @@ class Procedure(Status):
     # PRE: `slot` is output slot
     # PRE: there is enough input data for calculation
     @abstractmethod
-    @status("OK", "INVALID_NAME", "INCOMPLETE_INPUT")
+    @status("OK", "INVALID_SLOT", "INCOMPLETE_INPUT")
     def get(self, slot: str) -> Any:
         assert False
 
@@ -493,40 +493,70 @@ class ProcNode(InputProc, OutputProc):
 class SimpleProcMeta(StatusMeta):
     def __new__(cls, class_name: str, bases: tuple[type, ...],
             namespace: dict[str, Any], **kwargs: Any) -> type:
-        input_types = cls._get_field_types(class_name, namespace, "INPUTS")
+        input_types, input_names = cls._get_fields(class_name, namespace, "INPUTS")
+        output_types, output_names = cls._get_fields(class_name, namespace, "OUTPUTS")
         namespace["__input_types"] = input_types
+        namespace["__output_types"] = output_types
+        namespace["__input_names"] = input_names
+        namespace["__output_names"] = output_names
         return super().__new__(cls, class_name, bases, namespace, **kwargs)
 
     @staticmethod
-    def _get_field_types(class_name: str, namespace: dict[str, Any], key: str
-            ) -> dict[str, type]:
+    def _get_fields(class_name: str, namespace: dict[str, Any], key: str
+            ) -> tuple[dict[str, type], dict[str, str]]:
         if "__annotations__" not in namespace or key not in namespace:
-            return dict[str, type]()
+            return dict[str, type](), dict[str, str]()
         annotations = namespace["__annotations__"]
         types = dict[str, type]()
-        for slot in namespace["INPUTS"]:
+        names = dict[str, str]()
+        for slot in namespace[key]:
             if slot in annotations:
                 types[slot] = annotations[slot]
+                names[slot] = slot
                 continue
             protected_field = f"_{slot}"
             if protected_field in annotations:
                 types[slot] = annotations[protected_field]
+                names[slot] = protected_field
                 continue
             private_field = f"_{class_name}__{slot}"
             if private_field in annotations:
                 types[slot] = annotations[private_field]
+                names[slot] = private_field
                 continue
-        return types
+        return types, names
 
 
 class SimpleProc(Procedure, metaclass=SimpleProcMeta):
-    
+
+    __needs_update: bool = True
+    __invalid_input_slots: set[str] = set()
+
+    @classmethod
+    def __get_input_types(cls) -> dict[str, type]:
+        return getattr(cls, "__input_types")
+
+    def __get_output_types(self) -> dict[str, type]:
+        return getattr(self, "__output_types")
+
+    def __put(self, slot: str, value: Any) -> None:
+        setattr(self, getattr(self, "__input_names")[slot], value)
+
+    def __get(self, slot: str) -> Any:
+        return getattr(self, getattr(self, "__output_names")[slot])
+
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.__invalid_input_slots = set(self.__get_input_types().keys())
+
+
     # CLASS QUERIES
 
     # Get names and types of input data slots
     @classmethod
     def get_input_types(cls) -> dict[str, type]:
-        return getattr(cls, "__input_types")
+        return cls.__get_input_types()
 
     # Create procedure for given input types that are subtypes of the slot types
     @classmethod
@@ -543,6 +573,25 @@ class SimpleProc(Procedure, metaclass=SimpleProcMeta):
     # POST: input data in `slot` is set to `value`
     @status()
     def put(self, slot: str, value: Any) -> None:
+        input_types = self.__get_input_types()
+        if slot not in input_types:
+            self._set_status("put", "INVALID_SLOT")
+            return
+        if not _type_fits(type(value), input_types[slot]):
+            self._set_status("put", "INCOMPATIBLE_TYPE")
+            return
+        self.__put(slot, value)
+        if not self._is_valid_value(slot):
+            self._set_status("put", "INVALID_VALUE")
+            return
+        self.__invalid_input_slots.remove(slot)
+        self.__needs_update = True
+        self._set_status("put", "OK")
+
+
+    # Run the procedure
+    @abstractmethod
+    def run(self) -> None:
         assert False
 
 
@@ -550,6 +599,11 @@ class SimpleProc(Procedure, metaclass=SimpleProcMeta):
 
     # Get names and types of outputs
     def get_output_types(self) -> dict[str, type]:
+        return self.__get_output_types()
+
+    @abstractmethod
+    def _is_valid_value(self, slot: str) -> bool:
+        assert(slot in self.__get_input_types())
         assert False
 
     # get value
@@ -557,7 +611,17 @@ class SimpleProc(Procedure, metaclass=SimpleProcMeta):
     # PRE: there is enough input data for calculation
     @status()
     def get(self, slot: str) -> Any:
-        assert False
+        if slot not in self.__get_output_types():
+            self._set_status("put", "INVALID_SLOT")
+            return
+        if len(self.__invalid_input_slots) > 0:
+            self._set_status("put", "INCOMPLETE_INPUT")
+            return
+        if self.__needs_update:
+            self.run()
+            self.__needs_update = False
+        self._set_status("get", "OK")
+        return self.__get(slot)
 
 
 def _type_fits(t: type, required: type) -> bool:
