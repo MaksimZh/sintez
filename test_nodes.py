@@ -659,7 +659,7 @@ class Divmod(SimpleProc):
         self.__quotient, self.__remainder = divmod(self.__left, self.__right)
 
 
-class Test_autoproc(unittest.TestCase):
+class Test_SimpleProc(unittest.TestCase):
     
     def test(self):
         self.assertEqual(Divmod.get_input_types(), {"left": int, "right": int})
