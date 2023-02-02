@@ -161,5 +161,50 @@ class Test_Composition(unittest.TestCase):
         self.assertTrue(comp.is_status("set", "OK"))
 
 
+    def test_run_success(self):
+        # d, e = divmod(a, b)
+        # f, g = divmod(e, c)
+        comp = Composition([
+            (Divmod(),
+                {"left": "a", "right": "b"},
+                {"quotient": "d", "remainder": "e"}),
+            (Divmod(),
+                {"left": "e", "right": "c"},
+                {"quotient": "f", "remainder": "g"}),
+            ])
+        self.assertTrue(comp.needs_run())
+        comp.set("a", 117)
+        comp.set("b", 20)
+        comp.set("c", 5)
+        self.assertTrue(comp.needs_run())
+        comp.run()
+        self.assertTrue(comp.is_status("run", "OK"))
+        self.assertFalse(comp.needs_run())
+        comp.set("b", 40)
+        self.assertTrue(comp.needs_run())
+        comp.run()
+        self.assertTrue(comp.is_status("run", "OK"))
+        self.assertFalse(comp.needs_run())
+
+
+    def test_get(self):
+        # d, e = divmod(a, b)
+        # f, g = divmod(e, c)
+        comp = Composition([
+            (Divmod(),
+                {"left": "a", "right": "b"},
+                {"quotient": "d", "remainder": "e"}),
+            (Divmod(),
+                {"left": "e", "right": "c"},
+                {"quotient": "f", "remainder": "g"}),
+            ])
+        comp.set("a", 117)
+        comp.set("b", 20)
+        comp.set("c", 5)
+        comp.run()
+        #self.assertEqual(comp.get("d"), 17)
+        #self.assertTrue(comp.is_status("get", "OK"))
+
+
 if __name__ == "__main__":
     unittest.main()

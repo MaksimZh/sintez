@@ -25,7 +25,7 @@ class Procedure(Status):
         assert False
 
     # Run procedure
-    # PRE: procedure can be run successfully with current inputs
+    # PRE: procedure can run successfully with current inputs
     # POST: output values are set
     # POST: input values status set to unchanged
     @abstractmethod
@@ -150,7 +150,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
         self._set_status("set", "OK")
 
     # Run procedure
-    # PRE: procedure can be run successfully with current inputs
+    # PRE: procedure can run successfully with current inputs
     # POST: output values are set
     # POST: input values status set to unchanged
     @final
@@ -168,7 +168,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
 
     # Calculate the outputs
     # Used by `run` method
-    # PRE: procedure can be run successfully with current inputs
+    # PRE: procedure can run successfully with current inputs
     @abstractmethod
     @status("OK", "ERROR")
     def calculate(self) -> None:
@@ -215,6 +215,9 @@ class Composition(Procedure):
     __input_slots: dict[str, type]
     __input_map: dict[str, tuple[Procedure, str]]
     __output_slots: dict[str, type]
+    __output_map: dict[str, tuple[Procedure, str]]
+    __needs_run: bool
+
     
     # CONSTRUCTOR
     @status("OK", "ERROR", name="init")
@@ -223,7 +226,8 @@ class Composition(Procedure):
         self._set_status("init", "OK")
         input_slots = dict[str, type]()
         output_slots = dict[str, type]()
-        self.__input_map = dict[str, tuple[Procedure, str]]()
+        self.__input_map = dict()
+        self.__output_map = dict()
         for proc, proc_inputs, proc_outputs in contents:
             proc_input_slots = proc.get_input_slots()
             proc_output_slots = proc.get_output_slots()
@@ -232,11 +236,13 @@ class Composition(Procedure):
                 self.__input_map[name] = (proc, slot)
             for slot, name in proc_outputs.items():
                 output_slots[name] = proc_output_slots[slot]
-        for name in input_slots.keys() & output_slots.keys():
-            del input_slots[name]
-            del output_slots[name]
+                self.__output_map[name] = (proc, slot)
+        for slot in input_slots.keys() & output_slots.keys():
+            del input_slots[slot]
+            del output_slots[slot]
         self.__input_slots = input_slots
         self.__output_slots = output_slots
+        self.__needs_run = True
     
     
     # COMMANDS
@@ -253,15 +259,20 @@ class Composition(Procedure):
             return
         proc, input_slot = self.__input_map[slot]
         proc.set(input_slot, value)
-        self._set_status("set", proc.get_status("set"))
+        if not proc.is_status("set", "OK"):
+            self._set_status("set", proc.get_status("set"))
+            return
+        self.__needs_run = True
+        self._set_status("set", "OK")
 
     # Run procedure
-    # PRE: procedure can be run successfully with current inputs
+    # PRE: procedure can run successfully with current inputs
     # POST: output values are set
     # POST: input values status set to unchanged
     @status("OK", "INVALID_INPUT", "RUN_FAILED")
     def run(self) -> None:
-        assert False
+        self.__needs_run = False
+        self._set_status("run", "OK")
 
 
     # QUERIES
@@ -276,14 +287,17 @@ class Composition(Procedure):
 
     # Check if the procedure needs run to update outputs
     def needs_run(self) -> bool:
-        assert False
+        return self.__needs_run
 
     # Get output value
     # PRE: slot is valid output slot name
     # PRE: run was successful after last input change
     @status("OK", "INVALID_SLOT", "NEEDS_RUN")
     def get(self, slot: str) -> Any:
-        assert False
+        proc, output_slot = self.__output_map[slot]
+        value = proc.get(output_slot)
+        self._set_status("get", proc.get_status("get"))
+        return value
 
 
 def _type_fits(t: type, required: type) -> bool:
