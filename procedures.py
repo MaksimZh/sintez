@@ -209,6 +209,83 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
         assert False
 
 
+@final
+class Composition(Procedure):
+
+    __input_slots: dict[str, type]
+    __input_map: dict[str, tuple[Procedure, str]]
+    __output_slots: dict[str, type]
+    
+    # CONSTRUCTOR
+    @status("OK", "ERROR", name="init")
+    def __init__(self, contents: list[tuple[Procedure, dict[str, str], dict[str, str]]]) -> None:
+        super().__init__()
+        self._set_status("init", "OK")
+        input_slots = dict[str, type]()
+        output_slots = dict[str, type]()
+        self.__input_map = dict[str, tuple[Procedure, str]]()
+        for proc, proc_inputs, proc_outputs in contents:
+            proc_input_slots = proc.get_input_slots()
+            proc_output_slots = proc.get_output_slots()
+            for slot, name in proc_inputs.items():
+                input_slots[name] = proc_input_slots[slot]
+                self.__input_map[name] = (proc, slot)
+            for slot, name in proc_outputs.items():
+                output_slots[name] = proc_output_slots[slot]
+        for name in input_slots.keys() & output_slots.keys():
+            del input_slots[name]
+            del output_slots[name]
+        self.__input_slots = input_slots
+        self.__output_slots = output_slots
+    
+    
+    # COMMANDS
+
+    # Set input value
+    # PRE: `slot` is valid input slot name
+    # PRE: type of `value` is compatible with slot
+    # PRE: `value` is acceptable for the procedure
+    # POST: input value in slot `slot` is set to `value`
+    @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
+    def set(self, slot: str, value: Any) -> None:
+        if slot not in self.__input_slots:
+            self._set_status("set", "INVALID_SLOT")
+            return
+        proc, input_slot = self.__input_map[slot]
+        proc.set(input_slot, value)
+        self._set_status("set", proc.get_status("set"))
+
+    # Run procedure
+    # PRE: procedure can be run successfully with current inputs
+    # POST: output values are set
+    # POST: input values status set to unchanged
+    @status("OK", "INVALID_INPUT", "RUN_FAILED")
+    def run(self) -> None:
+        assert False
+
+
+    # QUERIES
+
+    # Get description of input slots
+    def get_input_slots(self) -> dict[str, type]:
+        return self.__input_slots
+
+    # Get description of output slots
+    def get_output_slots(self) -> dict[str, type]:
+        return self.__output_slots
+
+    # Check if the procedure needs run to update outputs
+    def needs_run(self) -> bool:
+        assert False
+
+    # Get output value
+    # PRE: slot is valid output slot name
+    # PRE: run was successful after last input change
+    @status("OK", "INVALID_SLOT", "NEEDS_RUN")
+    def get(self, slot: str) -> Any:
+        assert False
+
+
 def _type_fits(t: type, required: type) -> bool:
     if issubclass(t, required):
         return True
