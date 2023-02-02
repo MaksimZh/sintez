@@ -1,4 +1,4 @@
-from typing import Any, final
+from typing import Any, final, Optional
 from abc import abstractmethod
 from tools import Status, status, StatusMeta
 
@@ -21,7 +21,7 @@ class Procedure(Status):
     # POST: input value in slot `slot` is set to `value`
     @abstractmethod
     @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
-    def set(self, slot: str, value: Any) -> None:
+    def put(self, slot: str, value: Any) -> None:
         assert False
 
     # Run procedure
@@ -132,22 +132,22 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
     # POST: input value in slot `slot` is set to `value`
     @final
     @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
-    def set(self, slot: str, value: Any) -> None:
+    def put(self, slot: str, value: Any) -> None:
         input_slots = self.__get_input_slots()
         if slot not in input_slots:
-            self._set_status("set", "INVALID_SLOT")
+            self._set_status("put", "INVALID_SLOT")
             return
         if not _type_fits(type(value), input_slots[slot]):
-            self._set_status("set", "INVALID_TYPE")
+            self._set_status("put", "INVALID_TYPE")
             return
         if not self._is_valid_value(slot, value):
-            self._set_status("set", "INVALID_VALUE")
+            self._set_status("put", "INVALID_VALUE")
             return
         self.__set(slot, value)
         if slot in self.__missing_inputs:
             self.__missing_inputs.remove(slot)
         self.__needs_run = True
-        self._set_status("set", "OK")
+        self._set_status("put", "OK")
 
     # Run procedure
     # PRE: procedure can run successfully with current inputs
@@ -209,6 +209,159 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
         assert False
 
 
+# Data node for Composition
+# CONTAINS:
+#   - type
+#   - status (valid or not)
+#   - data (if valid)
+#   - input procedure node (optional)
+#   - output procedure nodes
+@final
+class DataNode(Status):
+
+    __type: type
+    __is_valid: bool
+    __data: Any
+    __input: Optional["ProcNode"]
+    __outputs: set["ProcNode"]
+    
+    # CONSTRUCTOR
+    # POST: type is `data_type`
+    # POST: data is invalid
+    # POST: no inputs
+    # POST: no outputs
+    def __init__(self, data_type: type) -> None:
+        super().__init__()
+        self.__type = data_type
+        self.__is_valid = False
+        self.__input = None
+        self.__outputs = set()
+
+
+    # COMMANDS
+
+    # Add input procedure node
+    # PRE: `input` is not in input or outputs
+    # PRE: input is empty
+    # POST: input is `input`
+    @status("OK", "ALREADY_LINKED", "MULTIPLE_INPUTS")
+    def add_input(self, input: "ProcNode") -> None:
+        assert False
+
+    # Add output procedure node
+    # PRE: `output` is not in input or outputs
+    # POST: `output` is in outputs
+    @status("OK", "ALREADY_LINKED")
+    def add_output(self, output: "ProcNode") -> None:
+        assert False
+
+    # Mark node as invalid
+    # POST: data is invalid
+    def invalidate(self) -> None:
+        self.__is_valid = False
+
+    # Set data
+    # PRE: `value` type fits data type
+    # POST: data is valid
+    # POST: data is `value`
+    @status("OK", "INVALID_TYPE")
+    def put(self, value: Any) -> None:
+        assert False
+
+
+    # QUERIES
+
+    # Get input
+    def get_input(self) -> Optional["ProcNode"]:
+        return self.__input
+
+    # Get outputs
+    def get_outputs(self) -> set["ProcNode"]:
+        return self.__outputs.copy()
+
+    # Get data type
+    def get_type(self) -> type:
+        return self.__type
+
+    # Check wether data is valid
+    def is_valid(self) -> bool:
+        return self.__is_valid
+
+    # Get data
+    # PRE: data is valid
+    @status("OK", "INVALID_DATA")
+    def get(self) -> Any:
+        assert False
+
+
+# Procedure node for Composition
+# CONTAINS:
+#   - procedure
+#   - status (needs run or not)
+#   - named input data nodes
+#   - named output data nodes
+@final
+class ProcNode(Status):
+
+    __proc: Procedure
+    __needs_run: bool
+    __inputs: dict[str, DataNode]
+    __outputs: dict[str, DataNode]
+
+    # CONSTRUCTOR
+    # POST: procedure is `proc`
+    # POST: needs run
+    def __init__(self, proc: Procedure) -> None:
+        super().__init__()
+        self.__proc = proc
+        self.__needs_run = True
+        self.__inputs = dict()
+        self.__outputs = dict()
+
+
+    # COMMANDS
+
+    # Add input data node
+    # PRE: `slot` is correct input slot
+    # PRE: `input` is not in outputs
+    # PRE: `input` type fits procedure input at `slot`
+    # POST: `input` is in inputs at `slot` 
+    def add_input(self, slot: str, input: DataNode) -> None:
+        assert False
+
+    # Add output data node
+    # PRE: `slot` is correct output slot
+    # PRE: `output` is not in inputs or outputs
+    # PRE: `output` type fits procedure output at `slot`
+    # POST: `output` is in outputs at `slot` 
+    def add_output(self, slot: str, output: DataNode) -> None:
+        assert False
+
+    # Mark that procedure needs run
+    # POST: needs run
+    def invalidate(self) -> None:
+        assert False
+
+    
+    # QUERIES
+
+    # Get inputs
+    def get_inputs(self) -> dict[str, DataNode]:
+        return self.__inputs.copy()
+
+    # Get outputs
+    def get_outputs(self) -> dict[str, DataNode]:
+        return self.__outputs.copy()
+
+    # Get procedure
+    def get_proc(self) -> Procedure:
+        return self.__proc
+
+    # Check if procedure needs run
+    def needs_run(self) -> bool:
+        return self.__needs_run
+
+
 @final
 class Composition(Procedure):
 
@@ -264,17 +417,17 @@ class Composition(Procedure):
     # PRE: `value` is acceptable for the procedure
     # POST: input value in slot `slot` is set to `value`
     @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
-    def set(self, slot: str, value: Any) -> None:
+    def put(self, slot: str, value: Any) -> None:
         if slot not in self.__input_slots:
-            self._set_status("set", "INVALID_SLOT")
+            self._set_status("put", "INVALID_SLOT")
             return
         for proc, input_slot in self.__input_proc[slot].items():
-            proc.set(input_slot, value)
-            if not proc.is_status("set", "OK"):
-                self._set_status("set", proc.get_status("set"))
+            proc.put(input_slot, value)
+            if not proc.is_status("put", "OK"):
+                self._set_status("put", proc.get_status("put"))
                 return
             self.__invalidate_proc(proc)
-        self._set_status("set", "OK")
+        self._set_status("put", "OK")
 
 
     # Run procedure
@@ -313,7 +466,7 @@ class Composition(Procedure):
                 continue
             value = proc.get(slot)
             for dest_proc, dest_slot in self.__input_proc[name].items():
-                dest_proc.set(dest_slot, value)
+                dest_proc.put(dest_slot, value)
         self.__proc_to_run.remove(proc)
 
 

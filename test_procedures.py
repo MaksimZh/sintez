@@ -4,6 +4,7 @@ from typing import Any
 
 from tools import status
 from procedures import Calculator, Composition
+from procedures import DataNode, ProcNode
 
 
 class Divmod(Calculator):
@@ -40,34 +41,34 @@ class Test_Calculator(unittest.TestCase):
 
     def test_set(self):
         dm = Divmod()
-        dm.set("left", 101)
-        self.assertTrue(dm.is_status("set", "OK"))
-        dm.set("middle", 1)
-        self.assertTrue(dm.is_status("set", "INVALID_SLOT"))
-        dm.set("quotient", 1)
-        self.assertTrue(dm.is_status("set", "INVALID_SLOT"))
-        dm.set("right", "foo")
-        self.assertTrue(dm.is_status("set", "INVALID_TYPE"))
-        dm.set("right", 0)
-        self.assertTrue(dm.is_status("set", "INVALID_VALUE"))
-        dm.set("right", 7)
-        self.assertTrue(dm.is_status("set", "OK"))
-        dm.set("left", 42)
-        self.assertTrue(dm.is_status("set", "OK"))
-        dm.set("right", 17)
-        self.assertTrue(dm.is_status("set", "OK"))
+        dm.put("left", 101)
+        self.assertTrue(dm.is_status("put", "OK"))
+        dm.put("middle", 1)
+        self.assertTrue(dm.is_status("put", "INVALID_SLOT"))
+        dm.put("quotient", 1)
+        self.assertTrue(dm.is_status("put", "INVALID_SLOT"))
+        dm.put("right", "foo")
+        self.assertTrue(dm.is_status("put", "INVALID_TYPE"))
+        dm.put("right", 0)
+        self.assertTrue(dm.is_status("put", "INVALID_VALUE"))
+        dm.put("right", 7)
+        self.assertTrue(dm.is_status("put", "OK"))
+        dm.put("left", 42)
+        self.assertTrue(dm.is_status("put", "OK"))
+        dm.put("right", 17)
+        self.assertTrue(dm.is_status("put", "OK"))
 
 
     def test_run_success(self):
         dm = Divmod()
         self.assertTrue(dm.needs_run())
-        dm.set("left", 101)
-        dm.set("right", 7)
+        dm.put("left", 101)
+        dm.put("right", 7)
         self.assertTrue(dm.needs_run())
         dm.run()
         self.assertTrue(dm.is_status("run", "OK"))
         self.assertFalse(dm.needs_run())
-        dm.set("left", 11)
+        dm.put("left", 11)
         self.assertTrue(dm.needs_run())
         dm.run()
         self.assertTrue(dm.is_status("run", "OK"))
@@ -76,7 +77,7 @@ class Test_Calculator(unittest.TestCase):
 
     def test_run_missing_input(self):
         dm = Divmod()
-        dm.set("left", 101)
+        dm.put("left", 101)
         dm.run()
         self.assertTrue(dm.is_status("run", "INVALID_INPUT"))
         self.assertTrue(dm.needs_run())
@@ -84,8 +85,8 @@ class Test_Calculator(unittest.TestCase):
 
     def test_run_fail(self):
         dm = Divmod()
-        dm.set("left", 101)
-        dm.set("right", -7)
+        dm.put("left", 101)
+        dm.put("right", -7)
         dm.run()
         self.assertTrue(dm.is_status("run", "RUN_FAILED"))
         self.assertTrue(dm.needs_run())
@@ -93,8 +94,8 @@ class Test_Calculator(unittest.TestCase):
 
     def test_get(self):
         dm = Divmod()
-        dm.set("left", 101)
-        dm.set("right", 7)
+        dm.put("left", 101)
+        dm.put("right", 7)
         dm.get("foo")
         self.assertTrue(dm.is_status("get", "INVALID_SLOT"))
         dm.get("quotient")
@@ -135,30 +136,30 @@ class Test_Composition(unittest.TestCase):
                 {"left": "e", "right": "c"},
                 {"quotient": "f", "remainder": "g"}),
             ])
-        comp.set("a", 101)
-        self.assertTrue(comp.is_status("set", "OK"))
-        comp.set("foo", 101)
-        self.assertTrue(comp.is_status("set", "INVALID_SLOT"))
-        comp.set("e", 101)
-        self.assertTrue(comp.is_status("set", "INVALID_SLOT"))
-        comp.set("quotient", 101)
-        self.assertTrue(comp.is_status("set", "INVALID_SLOT"))
-        comp.set("f", 101)
-        self.assertTrue(comp.is_status("set", "INVALID_SLOT"))
-        comp.set("a", "foo")
-        self.assertTrue(comp.is_status("set", "INVALID_TYPE"))
-        comp.set("b", 0)
-        self.assertTrue(comp.is_status("set", "INVALID_VALUE"))
-        comp.set("b", 7)
-        self.assertTrue(comp.is_status("set", "OK"))
-        comp.set("c", 3)
-        self.assertTrue(comp.is_status("set", "OK"))
-        comp.set("a", 101)
-        self.assertTrue(comp.is_status("set", "OK"))
-        comp.set("b", 17)
-        self.assertTrue(comp.is_status("set", "OK"))
-        comp.set("c", 13)
-        self.assertTrue(comp.is_status("set", "OK"))
+        comp.put("a", 101)
+        self.assertTrue(comp.is_status("put", "OK"))
+        comp.put("foo", 101)
+        self.assertTrue(comp.is_status("put", "INVALID_SLOT"))
+        comp.put("e", 101)
+        self.assertTrue(comp.is_status("put", "INVALID_SLOT"))
+        comp.put("quotient", 101)
+        self.assertTrue(comp.is_status("put", "INVALID_SLOT"))
+        comp.put("f", 101)
+        self.assertTrue(comp.is_status("put", "INVALID_SLOT"))
+        comp.put("a", "foo")
+        self.assertTrue(comp.is_status("put", "INVALID_TYPE"))
+        comp.put("b", 0)
+        self.assertTrue(comp.is_status("put", "INVALID_VALUE"))
+        comp.put("b", 7)
+        self.assertTrue(comp.is_status("put", "OK"))
+        comp.put("c", 3)
+        self.assertTrue(comp.is_status("put", "OK"))
+        comp.put("a", 101)
+        self.assertTrue(comp.is_status("put", "OK"))
+        comp.put("b", 17)
+        self.assertTrue(comp.is_status("put", "OK"))
+        comp.put("c", 13)
+        self.assertTrue(comp.is_status("put", "OK"))
 
 
     def test_run_success(self):
@@ -173,14 +174,14 @@ class Test_Composition(unittest.TestCase):
                 {"quotient": "f", "remainder": "g"}),
             ])
         self.assertTrue(comp.needs_run())
-        comp.set("a", 117)
-        comp.set("b", 20)
-        comp.set("c", 5)
+        comp.put("a", 117)
+        comp.put("b", 20)
+        comp.put("c", 5)
         self.assertTrue(comp.needs_run())
         comp.run()
         self.assertTrue(comp.is_status("run", "OK"))
         self.assertFalse(comp.needs_run())
-        comp.set("b", 40)
+        comp.put("b", 40)
         self.assertTrue(comp.needs_run())
         comp.run()
         self.assertTrue(comp.is_status("run", "OK"))
@@ -198,9 +199,9 @@ class Test_Composition(unittest.TestCase):
                 {"left": "e", "right": "c"},
                 {"quotient": "f", "remainder": "g"}),
             ])
-        comp.set("a", 117)
-        comp.set("b", 20)
-        comp.set("c", 5)
+        comp.put("a", 117)
+        comp.put("b", 20)
+        comp.put("c", 5)
         comp.run()
         self.assertEqual(comp.get("d"), 5)
         self.assertTrue(comp.is_status("get", "OK"))
@@ -208,6 +209,27 @@ class Test_Composition(unittest.TestCase):
         self.assertTrue(comp.is_status("get", "OK"))
         self.assertEqual(comp.get("g"), 2)
         self.assertTrue(comp.is_status("get", "OK"))
+
+
+class Test_DataNode(unittest.TestCase):
+    
+    def test_init(self):
+        d = DataNode(int)
+        self.assertIs(d.get_type(), int)
+        self.assertFalse(d.is_valid())
+        self.assertIsNone(d.get_input())
+        self.assertEqual(d.get_outputs(), set())
+
+
+class Test_ProcNode(unittest.TestCase):
+    
+    def test_init(self):
+        dm = Divmod()
+        p = ProcNode(dm)
+        self.assertIs(p.get_proc(), dm)
+        self.assertTrue(p.needs_run())
+        self.assertEqual(p.get_inputs(), {})
+        self.assertEqual(p.get_outputs(), {})
 
 
 if __name__ == "__main__":
