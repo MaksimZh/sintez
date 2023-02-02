@@ -213,10 +213,12 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
 class Composition(Procedure):
 
     __input_slots: dict[str, type]
-    __input_map: dict[str, tuple[Procedure, str]]
     __output_slots: dict[str, type]
-    __output_map: dict[str, tuple[Procedure, str]]
-    __needs_run: bool
+    __input_proc: dict[str, dict[Procedure, str]]
+    __output_proc: dict[str, tuple[Procedure, str]]
+    __proc_input: dict[Procedure, dict[str, str]]
+    __proc_output: dict[Procedure, dict[str, str]]
+    __proc_to_run: set[Procedure]
 
     
     # CONSTRUCTOR
@@ -226,23 +228,32 @@ class Composition(Procedure):
         self._set_status("init", "OK")
         input_slots = dict[str, type]()
         output_slots = dict[str, type]()
-        self.__input_map = dict()
-        self.__output_map = dict()
+        self.__input_proc = dict()
+        self.__output_proc = dict()
+        self.__proc_input = dict()
+        self.__proc_output = dict()
+        self.__proc_to_run = set()
         for proc, proc_inputs, proc_outputs in contents:
             proc_input_slots = proc.get_input_slots()
             proc_output_slots = proc.get_output_slots()
+            self.__proc_input[proc] = dict()
+            self.__proc_output[proc] = dict()
+            self.__proc_to_run.add(proc)
             for slot, name in proc_inputs.items():
                 input_slots[name] = proc_input_slots[slot]
-                self.__input_map[name] = (proc, slot)
+                if name not in self.__input_proc:
+                    self.__input_proc[name] = dict()
+                self.__input_proc[name][proc] = slot
+                self.__proc_input[proc][slot] = name
             for slot, name in proc_outputs.items():
                 output_slots[name] = proc_output_slots[slot]
-                self.__output_map[name] = (proc, slot)
+                self.__output_proc[name] = (proc, slot)
+                self.__proc_output[proc][slot] = name
         for slot in input_slots.keys() & output_slots.keys():
             del input_slots[slot]
             del output_slots[slot]
         self.__input_slots = input_slots
         self.__output_slots = output_slots
-        self.__needs_run = True
     
     
     # COMMANDS
@@ -257,13 +268,14 @@ class Composition(Procedure):
         if slot not in self.__input_slots:
             self._set_status("set", "INVALID_SLOT")
             return
-        proc, input_slot = self.__input_map[slot]
-        proc.set(input_slot, value)
-        if not proc.is_status("set", "OK"):
-            self._set_status("set", proc.get_status("set"))
-            return
-        self.__needs_run = True
+        for proc, input_slot in self.__input_proc[slot].items():
+            proc.set(input_slot, value)
+            if not proc.is_status("set", "OK"):
+                self._set_status("set", proc.get_status("set"))
+                return
+            self.__invalidate_proc(proc)
         self._set_status("set", "OK")
+
 
     # Run procedure
     # PRE: procedure can run successfully with current inputs
@@ -271,8 +283,38 @@ class Composition(Procedure):
     # POST: input values status set to unchanged
     @status("OK", "INVALID_INPUT", "RUN_FAILED")
     def run(self) -> None:
-        self.__needs_run = False
+        for name in self.__output_slots.keys():
+            self.__validate_proc(self.__output_proc[name][0])
+        assert(not self.needs_run())
         self._set_status("run", "OK")
+
+    
+    def __invalidate_proc(self, proc: Procedure):
+        if proc in self.__proc_to_run:
+            return
+        self.__proc_to_run.add(proc)
+        for _, name in self.__proc_output[proc].items():
+            if name not in self.__input_proc:
+                continue
+            for other_proc, _ in self.__input_proc[name].items():
+                self.__invalidate_proc(other_proc)
+
+
+    def __validate_proc(self, proc: Procedure):
+        if proc not in self.__proc_to_run:
+            return
+        for _, name in self.__proc_input[proc].items():
+            if name not in self.__output_proc:
+                continue
+            self.__validate_proc(self.__output_proc[name][0])
+        proc.run()
+        for slot, name in self.__proc_output[proc].items():
+            if name not in self.__input_proc:
+                continue
+            value = proc.get(slot)
+            for dest_proc, dest_slot in self.__input_proc[name].items():
+                dest_proc.set(dest_slot, value)
+        self.__proc_to_run.remove(proc)
 
 
     # QUERIES
@@ -287,14 +329,14 @@ class Composition(Procedure):
 
     # Check if the procedure needs run to update outputs
     def needs_run(self) -> bool:
-        return self.__needs_run
+        return len(self.__proc_to_run) > 0
 
     # Get output value
     # PRE: slot is valid output slot name
     # PRE: run was successful after last input change
     @status("OK", "INVALID_SLOT", "NEEDS_RUN")
     def get(self, slot: str) -> Any:
-        proc, output_slot = self.__output_map[slot]
+        proc, output_slot = self.__output_proc[slot]
         value = proc.get(output_slot)
         self._set_status("get", proc.get_status("get"))
         return value

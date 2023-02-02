@@ -202,8 +202,12 @@ class Test_Composition(unittest.TestCase):
         comp.set("b", 20)
         comp.set("c", 5)
         comp.run()
-        #self.assertEqual(comp.get("d"), 17)
-        #self.assertTrue(comp.is_status("get", "OK"))
+        self.assertEqual(comp.get("d"), 5)
+        self.assertTrue(comp.is_status("get", "OK"))
+        self.assertEqual(comp.get("f"), 3)
+        self.assertTrue(comp.is_status("get", "OK"))
+        self.assertEqual(comp.get("g"), 2)
+        self.assertTrue(comp.is_status("get", "OK"))
 
 
 if __name__ == "__main__":
