@@ -106,7 +106,7 @@ class Test_Calculator(unittest.TestCase):
         self.assertTrue(dm.is_status("get", "OK"))
 
 
-class Test_CompositeProcedure(unittest.TestCase):
+class Test_Composition(unittest.TestCase):
 
     def test_slots(self):
         # d, e = divmod(a, b)
