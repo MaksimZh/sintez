@@ -356,215 +356,11 @@ class NodeVisitor(ABC):
         assert False
 
 
-# Data node for Composition
-# CONTAINS:
-#   - type
-#   - status (valid or not)
-#   - data (if valid)
-#   - input procedure node and slot (optional)
-#   - output procedure nodes and slots
-@final
-class DataNode(Status):
-
-    __type: type
-    __is_valid: bool
-    __data: Any
-    __input: Optional["ProcNode0"]
-    __outputs: set["ProcNode0"]
-    
-    # CONSTRUCTOR
-    # POST: type is `data_type`
-    # POST: data is invalid
-    # POST: no inputs
-    # POST: no outputs
-    def __init__(self, data_type: type) -> None:
-        super().__init__()
-        self.__type = data_type
-        self.__is_valid = False
-        self.__input = None
-        self.__outputs = set()
-
-
-    # COMMANDS
-
-    # Add input procedure node
-    # PRE: `input` is not in input or outputs
-    # PRE: input is empty
-    # POST: input is `input`
-    @status("OK", "ALREADY_LINKED", "MULTIPLE_INPUTS")
-    def add_input(self, input: "ProcNode0") -> None:
-        if input is self.__input or input in self.__outputs:
-            self._set_status("add_input", "ALREADY_LINKED")
-            return
-        if self.__input is not None:
-            self._set_status("add_input", "MULTIPLE_INPUTS")
-            return
-        self.__input = input
-        self._set_status("add_input", "OK")
-
-    # Add output procedure node
-    # PRE: `output` is not in input or outputs
-    # POST: `output` is in outputs
-    @status("OK", "ALREADY_LINKED")
-    def add_output(self, output: "ProcNode0") -> None:
-        if output is self.__input or output in self.__outputs:
-            self._set_status("add_output", "ALREADY_LINKED")
-            return
-        self.__outputs.add(output)
-        self._set_status("add_output", "OK")
-
-    # Mark node as invalid
-    # POST: data is invalid
-    def invalidate(self) -> None:
-        self.__is_valid = False
-
-    # Set data
-    # PRE: `value` type fits data type
-    # POST: data is valid
-    # POST: data is `value`
-    @status("OK", "INVALID_TYPE")
-    def put(self, value: Any) -> None:
-        if not _type_fits(type(value), self.__type):
-            self._set_status("put", "INVALID_TYPE")
-            return
-        self.__is_valid = True
-        self.__data = value
-        self._set_status("put", "OK")
-
-
-    # QUERIES
-
-    # Get input
-    def get_input(self) -> Optional["ProcNode0"]:
-        return self.__input
-
-    # Get outputs
-    def get_outputs(self) -> set["ProcNode0"]:
-        return self.__outputs.copy()
-
-    # Get data type
-    def get_type(self) -> type:
-        return self.__type
-
-    # Check wether data is valid
-    def is_valid(self) -> bool:
-        return self.__is_valid
-
-    # Get data
-    # PRE: data is valid
-    @status("OK", "INVALID_DATA")
-    def get(self) -> Any:
-        if not self.is_valid():
-            self._set_status("get", "INVALID_DATA")
-            return None
-        self._set_status("get", "OK")
-        return self.__data
-
-
-# Procedure node for Composition
-# CONTAINS:
-#   - procedure
-#   - status (needs run or not)
-#   - named input data nodes
-#   - named output data nodes
-@final
-class ProcNode0(Status):
-
-    __proc: Procedure
-    __needs_run: bool
-    __inputs: dict[str, DataNode]
-    __outputs: dict[str, DataNode]
-
-    # CONSTRUCTOR
-    # POST: procedure is `proc`
-    # POST: needs run
-    def __init__(self, proc: Procedure) -> None:
-        super().__init__()
-        self.__proc = proc
-        self.__needs_run = True
-        self.__inputs = dict()
-        self.__outputs = dict()
-
-
-    # COMMANDS
-
-    # Add input data node
-    # PRE: `slot` is correct input slot
-    # PRE: `input` is not in outputs
-    # PRE: `input` type fits procedure input at `slot`
-    # POST: `input` is in inputs at `slot`
-    @status("OK", "INVALID_SLOT", "SLOT_OCCUPIED", "ALREADY_LINKED", "INVALID_TYPE")
-    def add_input(self, slot: str, input: DataNode) -> None:
-        if slot not in self.__proc.get_input_slots():
-            self._set_status("add_input", "INVALID_SLOT")
-            return
-        if slot in self.__inputs:
-            self._set_status("add_input", "SLOT_OCCUPIED")
-            return
-        if input in self.__inputs.values() or input in self.__outputs.values():
-            self._set_status("add_input", "ALREADY_LINKED")
-            return
-        if not _type_fits(input.get_type(), self.__proc.get_input_slots()[slot]):
-            self._set_status("add_input", "INVALID_TYPE")
-            return
-        self.__inputs[slot] = input
-        self._set_status("add_input", "OK")
-
-    # Add output data node
-    # PRE: `slot` is correct output slot
-    # PRE: `output` is not in inputs or outputs
-    # PRE: `output` type fits procedure output at `slot`
-    # POST: `output` is in outputs at `slot` 
-    @status("OK", "INVALID_SLOT", "SLOT_OCCUPIED", "ALREADY_LINKED", "INVALID_TYPE")
-    def add_output(self, slot: str, output: DataNode) -> None:
-        if slot not in self.__proc.get_output_slots():
-            self._set_status("add_output", "INVALID_SLOT")
-            return
-        if slot in self.__outputs:
-            self._set_status("add_output", "SLOT_OCCUPIED")
-            return
-        if output in self.__inputs.values() or output in self.__outputs.values():
-            self._set_status("add_output", "ALREADY_LINKED")
-            return
-        if not _type_fits(output.get_type(), self.__proc.get_output_slots()[slot]):
-            self._set_status("add_output", "INVALID_TYPE")
-            return
-        self.__outputs[slot] = output
-        self._set_status("add_output", "OK")
-
-    # Mark that procedure needs run
-    # POST: needs run
-    def invalidate(self) -> None:
-        assert False
-
-    
-    # QUERIES
-
-    # Get inputs
-    def get_inputs(self) -> dict[str, DataNode]:
-        return self.__inputs.copy()
-
-    # Get outputs
-    def get_outputs(self) -> dict[str, DataNode]:
-        return self.__outputs.copy()
-
-    # Get procedure
-    def get_proc(self) -> Procedure:
-        return self.__proc
-
-    # Check if procedure needs run
-    def needs_run(self) -> bool:
-        return self.__needs_run
-
-
 @final
 class Composition(Procedure):
 
     __input_slots: dict[str, type]
     __output_slots: dict[str, type]
-
-    __inputs: dict[str, DataNode]
-    __outputs: dict[str, DataNode]
 
     __input_proc: dict[str, dict[Procedure, str]]
     __output_proc: dict[str, tuple[Procedure, str]]
@@ -584,7 +380,6 @@ class Composition(Procedure):
         output_nodes = dict[str, SlotNode]()
         procedures = set[ProcNode]()
         
-        data = dict[str, DataNode]()
         self.__input_proc = dict()
         self.__output_proc = dict()
         self.__proc_input = dict()
@@ -595,7 +390,6 @@ class Composition(Procedure):
             proc_node = ProcNode(proc)
             procedures.add(proc_node)
         
-            proc_node0 = ProcNode0(proc)
             proc_input_slots = proc.get_input_slots()
             proc_output_slots = proc.get_output_slots()
             self.__proc_input[proc] = dict()
@@ -610,12 +404,6 @@ class Composition(Procedure):
                 slot_node.add_output(proc_node)
                 proc_node.add_input(slot_node)
         
-                if name not in data:
-                    data[name] = DataNode(proc_input_slots[slot])
-                data_node = data[name]
-                assert _type_fits(proc_input_slots[slot], data_node.get_type())
-                proc_node0.add_input(slot, data_node)
-                data_node.add_output(proc_node0)
                 if name not in self.__input_proc:
                     self.__input_proc[name] = dict()
                 self.__input_proc[name][proc] = slot
@@ -633,22 +421,8 @@ class Composition(Procedure):
                 slot_node = output_nodes[name]
                 assert _type_fits(proc_output_slots[slot], slot_node.get_type())
         
-                if name not in data:
-                    data[name] = DataNode(proc_output_slots[slot])
-                data_node = data[name]
-                assert _type_fits(proc_output_slots[slot], data_node.get_type())
-                proc_node0.add_output(slot, data_node)
-                data_node.add_input(proc_node0)
                 self.__output_proc[name] = (proc, slot)
                 self.__proc_output[proc][slot] = name
-
-        self.__inputs = dict()
-        self.__outputs = dict()
-        for name, data in data.items():
-            if data.get_input() is None:
-                self.__inputs[name] = data
-            if len(data.get_outputs()) == 0:
-                self.__outputs[name] = data
 
         internal_names = set[str]()
         for name, output_node in output_nodes.items():
@@ -682,7 +456,7 @@ class Composition(Procedure):
     # POST: input value in slot `slot` is set to `value`
     @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
     def put(self, slot: str, value: Any) -> None:
-        if slot not in self.__inputs:
+        if slot not in self.__input_slots:
             self._set_status("put", "INVALID_SLOT")
             return
         for proc, input_slot in self.__input_proc[slot].items():
@@ -700,7 +474,7 @@ class Composition(Procedure):
     # POST: input values status set to unchanged
     @status("OK", "INVALID_INPUT", "RUN_FAILED")
     def run(self) -> None:
-        for name in self.__outputs.keys():
+        for name in self.__output_slots:
             self.__validate_proc(self.__output_proc[name][0])
         assert(not self.needs_run())
         self._set_status("run", "OK")

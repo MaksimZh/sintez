@@ -4,7 +4,7 @@ from typing import Any
 
 from tools import status
 from procedures import Calculator, Composition
-from procedures import Procedure, DataNode, ProcNode0
+from procedures import Node, SlotNode, ProcNode, NodeVisitor
 
 
 class Divmod(Calculator):
@@ -211,162 +211,63 @@ class Test_Composition(unittest.TestCase):
         self.assertTrue(comp.is_status("get", "OK"))
 
 
-class Test_DataNode(unittest.TestCase):
+class DummyNode(Node):
+    def visit(self, visitor: NodeVisitor) -> None:
+        pass
+
+
+class Test_Node(unittest.TestCase):
     
     def test_init(self):
-        d = DataNode(int)
-        self.assertIs(d.get_type(), int)
-        self.assertFalse(d.is_valid())
-        self.assertIsNone(d.get_input())
+        d = DummyNode()
+        self.assertEqual(d.get_inputs(), set())
         self.assertEqual(d.get_outputs(), set())
 
 
     def test_add_IO(self):
-        d = DataNode(int)
-        i = ProcNode0(Divmod())
-        o1 = ProcNode0(Divmod())
-        o2 = ProcNode0(Divmod())
+        d = DummyNode()
+        i1 = DummyNode()
+        i2 = DummyNode()
+        o1 = DummyNode()
+        o2 = DummyNode()
+        d.add_input(i1)
+        self.assertTrue(d.is_status("add_input", "OK"))
         d.add_output(o1)
         self.assertTrue(d.is_status("add_output", "OK"))
-        d.add_output(o1)
-        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
+        d.add_input(i1)
+        self.assertTrue(d.is_status("add_input", "ALREADY_LINKED"))
         d.add_input(o1)
         self.assertTrue(d.is_status("add_input", "ALREADY_LINKED"))
-        d.add_input(i)
+        d.add_input(i2)
         self.assertTrue(d.is_status("add_input", "OK"))
-        d.add_input(i)
-        self.assertTrue(d.is_status("add_input", "ALREADY_LINKED"))
-        d.add_input(o2)
-        self.assertTrue(d.is_status("add_input", "MULTIPLE_INPUTS"))
+        d.add_output(o1)
+        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
+        d.add_output(i1)
+        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
         d.add_output(o2)
         self.assertTrue(d.is_status("add_output", "OK"))
-        self.assertIs(d.get_input(), i)
+        self.assertEqual(d.get_inputs(), {i1, i2})
         self.assertEqual(d.get_outputs(), {o1, o2})
 
 
-    def test_put(self):
-        d = DataNode(int)
-        d.put("foo")
-        self.assertTrue(d.is_status("put", "INVALID_TYPE"))
-        self.assertFalse(d.is_valid())
-        d.put(1)
-        self.assertTrue(d.is_status("put", "OK"))
-        self.assertTrue(d.is_valid())
-
-
-    def test_invalidate(self):
-        d = DataNode(int)
-        d.invalidate()
-        self.assertFalse(d.is_valid())
-        d.put(1)
-        self.assertTrue(d.is_valid())
-        d.invalidate()
-        self.assertFalse(d.is_valid())
-
-
-    def test_get(self):
-        d = DataNode(int)
-        d.get()
-        self.assertTrue(d.is_status("get", "INVALID_DATA"))
-        d.put(1)
-        self.assertEqual(d.get(), 1)
-        self.assertTrue(d.is_status("get", "OK"))
+class Test_SlotNode(unittest.TestCase):
+    
+    def test_init(self):
+        d = SlotNode("foo", int)
+        self.assertEqual(d.get_inputs(), set())
+        self.assertEqual(d.get_outputs(), set())
+        self.assertIs(d.get_slot(), "foo")
+        self.assertIs(d.get_type(), int)
 
 
 class Test_ProcNode(unittest.TestCase):
 
-    class DummyProc(Procedure):
-
-        __input_slots: dict[str, type]
-        __output_slots: dict[str, type]
-        __needs_run: bool
-        
-        def __init__(self, inputs: dict[str, type],
-                outputs: dict[str, type]) -> None:
-            super().__init__()
-            self.__input_slots = inputs
-            self.__output_slots = outputs
-            self.__needs_run = True
-
-        @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
-        def put(self, slot: str, value: Any) -> None:
-            self.__needs_run = True
-            self._set_status("put", "OK")
-
-        @status("OK", "INVALID_INPUT", "RUN_FAILED")
-        def run(self) -> None:
-            self.__needs_run = False
-            self._set_status("run", "OK")
-
-        def get_input_slots(self) -> dict[str, type]:
-            return self.__input_slots.copy()
-
-        def get_output_slots(self) -> dict[str, type]:
-            return self.__output_slots.copy()
-
-        def needs_run(self) -> bool:
-            return self.__needs_run
-
-        @status("OK", "INVALID_SLOT", "NEEDS_RUN")
-        def get(self, slot: str) -> Any:
-            self._set_status("get", "OK")
-            return self.__output_slots[slot]()
-
-
     def test_init(self):
         dm = Divmod()
-        p = ProcNode0(dm)
+        p = ProcNode(dm)
+        self.assertEqual(p.get_inputs(), set())
+        self.assertEqual(p.get_outputs(), set())
         self.assertIs(p.get_proc(), dm)
-        self.assertTrue(p.needs_run())
-        self.assertEqual(p.get_inputs(), {})
-        self.assertEqual(p.get_outputs(), {})
-
-
-    def test_add_IO(self):
-        p = ProcNode0(self.DummyProc({"a": int, "b": str}, {"c": int, "d": str}))
-        i1 = DataNode(int)
-        i2 = DataNode(int)
-        i3 = DataNode(str)
-        o1 = DataNode(int)
-        o2 = DataNode(int)
-        o3 = DataNode(str)
-        p.add_input("a", i1)
-        self.assertTrue(p.is_status("add_input", "OK"))
-        p.add_output("c", o1)
-        self.assertTrue(p.is_status("add_output", "OK"))
-        
-        p.add_input("foo", i2)
-        self.assertTrue(p.is_status("add_input", "INVALID_SLOT"))
-        p.add_input("c", i2)
-        self.assertTrue(p.is_status("add_input", "INVALID_SLOT"))
-        p.add_input("a", i2)
-        self.assertTrue(p.is_status("add_input", "SLOT_OCCUPIED"))
-        p.add_input("b", i1)
-        self.assertTrue(p.is_status("add_input", "ALREADY_LINKED"))
-        p.add_input("b", o1)
-        self.assertTrue(p.is_status("add_input", "ALREADY_LINKED"))
-        p.add_input("b", i2)
-        self.assertTrue(p.is_status("add_input", "INVALID_TYPE"))
-        p.add_input("b", i3)
-        self.assertTrue(p.is_status("add_input", "OK"))
-        
-        p.add_output("foo", o2)
-        self.assertTrue(p.is_status("add_output", "INVALID_SLOT"))
-        p.add_output("a", o2)
-        self.assertTrue(p.is_status("add_output", "INVALID_SLOT"))
-        p.add_output("c", o2)
-        self.assertTrue(p.is_status("add_output", "SLOT_OCCUPIED"))
-        p.add_output("d", o1)
-        self.assertTrue(p.is_status("add_output", "ALREADY_LINKED"))
-        p.add_output("d", i1)
-        self.assertTrue(p.is_status("add_output", "ALREADY_LINKED"))
-        p.add_output("d", o2)
-        self.assertTrue(p.is_status("add_output", "INVALID_TYPE"))
-        p.add_output("d", o3)
-        self.assertTrue(p.is_status("add_output", "OK"))
-
-        self.assertEqual(p.get_inputs(), {"a": i1, "b": i3})
-        self.assertEqual(p.get_outputs(), {"c": o1, "d": o3})
 
 
 if __name__ == "__main__":
