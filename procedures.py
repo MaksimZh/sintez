@@ -1,5 +1,5 @@
 from typing import Any, final, Optional
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from tools import Status, status, StatusMeta
 
 
@@ -209,21 +209,168 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
         assert False
 
 
+# Base node class for Composition
+# CONTAINS:
+#   - input nodes
+#   - output nodes
+class Node(Status):
+
+    __inputs: set["Node"]
+    __outputs: set["Node"]
+
+
+    # CONSTRUCTOR
+    # POST: no inputs
+    # POST: no outputs
+    def __init__(self) -> None:
+        super().__init__()
+        self.__inputs = set()
+        self.__outputs = set()
+
+
+    # COMMANDS
+
+    # Add input node
+    # PRE: `input` is not in inputs or outputs
+    # POST: `input` is in inputs
+    @status("OK", "ALREADY_LINKED")
+    def add_input(self, input: "Node") -> None:
+        if input in self.__inputs or input in self.__outputs:
+            self._set_status("add_input", "ALREADY_LINKED")
+            return
+        self.__inputs.add(input)
+        self._set_status("add_input", "OK")
+
+    # Add output node
+    # PRE: `output` is not in input or outputs
+    # POST: `output` is in outputs
+    @status("OK", "ALREADY_LINKED")
+    def add_output(self, output: "Node") -> None:
+        if output in self.__inputs or output in self.__outputs:
+            self._set_status("add_output", "ALREADY_LINKED")
+            return
+        self.__outputs.add(output)
+        self._set_status("add_output", "OK")
+
+
+    # Apply custom operation
+    # POST: visitor method called with this object
+    @abstractmethod
+    def visit(self, visitor: "NodeVisitor") -> None:
+        assert False
+
+    
+    # QUERIES
+
+    # Get input
+    def get_inputs(self) -> set["Node"]:
+        return self.__inputs.copy()
+
+    # Get outputs
+    def get_outputs(self) -> set["Node"]:
+        return self.__outputs.copy()
+
+
+# Slot node for Composition
+# INHERITED:
+#   - input nodes
+#   - output nodes
+# CONTAINS:
+#   - slot id
+#   - data type
+class SlotNode(Node):
+
+    __slot: str
+    __type: type
+
+    # CONSTRUCTOR
+    # POST: no inputs
+    # POST: no outputs
+    # POST: slot id is `slot`
+    # POST: data type is `data_type`
+    def __init__(self, slot: str, data_type: type) -> None:
+        super().__init__()
+        self.__slot = slot
+        self.__type = data_type
+
+    
+    # COMMANDS
+
+    # Apply custom operation
+    def visit(self, visitor: "NodeVisitor") -> None:
+        visitor.visit_slot_node(self)
+
+
+    # QUERIES
+
+    # Get slot id
+    def get_slot(self) -> str:
+        return self.__slot
+
+    # Get data type
+    def get_type(self) -> type:
+        return self.__type
+
+
+# Slot node for Composition
+# INHERITED:
+#   - input nodes
+#   - output nodes
+# CONTAINS:
+#   - procedure
+class ProcNode(Node):
+
+    __proc: Procedure
+
+    # CONSTRUCTOR
+    # POST: no inputs
+    # POST: no outputs
+    # POST: procedure is `proc`
+    # POST: type is `data_type`
+    def __init__(self, proc: Procedure) -> None:
+        super().__init__()
+        self.__proc = proc
+
+    
+    # COMMANDS
+
+    # Apply custom operation
+    def visit(self, visitor: "NodeVisitor") -> None:
+        visitor.visit_proc_node(self)
+
+
+    # QUERIES
+    
+    # Get procedure
+    def get_proc(self) -> Procedure:
+        return self.__proc
+
+
+class NodeVisitor(ABC):
+    @abstractmethod
+    def visit_slot_node(self, node: SlotNode) -> None:
+        assert False
+
+    @abstractmethod
+    def visit_proc_node(self, node: ProcNode) -> None:
+        assert False
+
+
 # Data node for Composition
 # CONTAINS:
 #   - type
 #   - status (valid or not)
 #   - data (if valid)
-#   - input procedure node (optional)
-#   - output procedure nodes
+#   - input procedure node and slot (optional)
+#   - output procedure nodes and slots
 @final
 class DataNode(Status):
 
     __type: type
     __is_valid: bool
     __data: Any
-    __input: Optional["ProcNode"]
-    __outputs: set["ProcNode"]
+    __input: Optional["ProcNode0"]
+    __outputs: set["ProcNode0"]
     
     # CONSTRUCTOR
     # POST: type is `data_type`
@@ -245,7 +392,7 @@ class DataNode(Status):
     # PRE: input is empty
     # POST: input is `input`
     @status("OK", "ALREADY_LINKED", "MULTIPLE_INPUTS")
-    def add_input(self, input: "ProcNode") -> None:
+    def add_input(self, input: "ProcNode0") -> None:
         if input is self.__input or input in self.__outputs:
             self._set_status("add_input", "ALREADY_LINKED")
             return
@@ -259,7 +406,7 @@ class DataNode(Status):
     # PRE: `output` is not in input or outputs
     # POST: `output` is in outputs
     @status("OK", "ALREADY_LINKED")
-    def add_output(self, output: "ProcNode") -> None:
+    def add_output(self, output: "ProcNode0") -> None:
         if output is self.__input or output in self.__outputs:
             self._set_status("add_output", "ALREADY_LINKED")
             return
@@ -288,11 +435,11 @@ class DataNode(Status):
     # QUERIES
 
     # Get input
-    def get_input(self) -> Optional["ProcNode"]:
+    def get_input(self) -> Optional["ProcNode0"]:
         return self.__input
 
     # Get outputs
-    def get_outputs(self) -> set["ProcNode"]:
+    def get_outputs(self) -> set["ProcNode0"]:
         return self.__outputs.copy()
 
     # Get data type
@@ -321,7 +468,7 @@ class DataNode(Status):
 #   - named input data nodes
 #   - named output data nodes
 @final
-class ProcNode(Status):
+class ProcNode0(Status):
 
     __proc: Procedure
     __needs_run: bool
@@ -413,6 +560,9 @@ class ProcNode(Status):
 @final
 class Composition(Procedure):
 
+    __input_slots: dict[str, type]
+    __output_slots: dict[str, type]
+
     __inputs: dict[str, DataNode]
     __outputs: dict[str, DataNode]
 
@@ -429,46 +579,66 @@ class Composition(Procedure):
     def __init__(self, contents: list[ProcDescr]) -> None:
         super().__init__()
         self._set_status("init", "OK")
+
+        input_nodes = dict[str, set[SlotNode]]()
+        output_nodes = dict[str, SlotNode]()
+        procedures = set[ProcNode]()
         
         data = dict[str, DataNode]()
-        
         self.__input_proc = dict()
         self.__output_proc = dict()
         self.__proc_input = dict()
         self.__proc_output = dict()
         self.__proc_to_run = set()
         for proc, proc_inputs, proc_outputs in contents:
-        
+
             proc_node = ProcNode(proc)
-            
+            procedures.add(proc_node)
+        
+            proc_node0 = ProcNode0(proc)
             proc_input_slots = proc.get_input_slots()
             proc_output_slots = proc.get_output_slots()
             self.__proc_input[proc] = dict()
             self.__proc_output[proc] = dict()
             self.__proc_to_run.add(proc)
             for slot, name in proc_inputs.items():
+
+                if name not in input_nodes:
+                    input_nodes[name] = set()
+                slot_node = SlotNode(slot, proc_input_slots[slot])
+                input_nodes[name].add(slot_node)
+                slot_node.add_output(proc_node)
+                proc_node.add_input(slot_node)
         
                 if name not in data:
                     data[name] = DataNode(proc_input_slots[slot])
                 data_node = data[name]
                 assert _type_fits(proc_input_slots[slot], data_node.get_type())
-                proc_node.add_input(slot, data_node)
-                data_node.add_output(proc_node)
-                
+                proc_node0.add_input(slot, data_node)
+                data_node.add_output(proc_node0)
                 if name not in self.__input_proc:
                     self.__input_proc[name] = dict()
                 self.__input_proc[name][proc] = slot
                 self.__proc_input[proc][slot] = name
         
             for slot, name in proc_outputs.items():
+
+                slot_node = SlotNode(slot, proc_output_slots[slot])
+                output_nodes[name] = slot_node
+                proc_node.add_output(slot_node)
+                slot_node.add_input(proc_node)
+        
+                if name not in output_nodes:
+                    output_nodes[name] = SlotNode(slot, proc_output_slots[slot])
+                slot_node = output_nodes[name]
+                assert _type_fits(proc_output_slots[slot], slot_node.get_type())
         
                 if name not in data:
                     data[name] = DataNode(proc_output_slots[slot])
                 data_node = data[name]
                 assert _type_fits(proc_output_slots[slot], data_node.get_type())
-                proc_node.add_output(slot, data_node)
-                data_node.add_input(proc_node)
-                
+                proc_node0.add_output(slot, data_node)
+                data_node.add_input(proc_node0)
                 self.__output_proc[name] = (proc, slot)
                 self.__proc_output[proc][slot] = name
 
@@ -479,6 +649,28 @@ class Composition(Procedure):
                 self.__inputs[name] = data
             if len(data.get_outputs()) == 0:
                 self.__outputs[name] = data
+
+        internal_names = set[str]()
+        for name, output_node in output_nodes.items():
+            if name not in input_nodes:
+                continue
+            for input_node in input_nodes[name]:
+                output_node.add_output(input_node)
+                input_node.add_input(output_node)
+                assert _type_fits(output_node.get_type(), input_node.get_type())
+            internal_names.add(name)
+        for name in internal_names:
+            del input_nodes[name]
+            del output_nodes[name]
+        
+        self.__input_slots = dict[str, type]()
+        for name, nodes in input_nodes.items():
+            t = _type_intersection([node.get_type() for node in nodes])
+            assert t
+            self.__input_slots[name] = t
+        self.__output_slots = dict[str, type]()
+        for name, node in output_nodes.items():
+            self.__output_slots[name] = node.get_type()
 
     
     # COMMANDS
@@ -546,13 +738,11 @@ class Composition(Procedure):
 
     # Get description of input slots
     def get_input_slots(self) -> dict[str, type]:
-        return dict([(slot, data.get_type()) \
-            for slot, data in self.__inputs.items()])
+        return self.__input_slots.copy()
 
     # Get description of output slots
     def get_output_slots(self) -> dict[str, type]:
-        return dict([(slot, data.get_type()) \
-            for slot, data in self.__outputs.items()])
+        return self.__output_slots.copy()
 
     # Check if the procedure needs run to update outputs
     def needs_run(self) -> bool:
@@ -577,3 +767,14 @@ def _type_fits(t: type, required: type) -> bool:
     if required is float:
         return t is int
     return False
+
+
+def _type_intersection(types: list[type]) -> Optional[type]:
+    minor_type = types[0]
+    for t in types[1:]:
+        if _type_fits(minor_type, t):
+            continue
+        if not _type_fits(t, minor_type):
+            return None
+        minor_type = t
+    return minor_type

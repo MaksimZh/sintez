@@ -4,7 +4,7 @@ from typing import Any
 
 from tools import status
 from procedures import Calculator, Composition
-from procedures import Procedure, DataNode, ProcNode
+from procedures import Procedure, DataNode, ProcNode0
 
 
 class Divmod(Calculator):
@@ -223,9 +223,9 @@ class Test_DataNode(unittest.TestCase):
 
     def test_add_IO(self):
         d = DataNode(int)
-        i = ProcNode(Divmod())
-        o1 = ProcNode(Divmod())
-        o2 = ProcNode(Divmod())
+        i = ProcNode0(Divmod())
+        o1 = ProcNode0(Divmod())
+        o2 = ProcNode0(Divmod())
         d.add_output(o1)
         self.assertTrue(d.is_status("add_output", "OK"))
         d.add_output(o1)
@@ -315,7 +315,7 @@ class Test_ProcNode(unittest.TestCase):
 
     def test_init(self):
         dm = Divmod()
-        p = ProcNode(dm)
+        p = ProcNode0(dm)
         self.assertIs(p.get_proc(), dm)
         self.assertTrue(p.needs_run())
         self.assertEqual(p.get_inputs(), {})
@@ -323,7 +323,7 @@ class Test_ProcNode(unittest.TestCase):
 
 
     def test_add_IO(self):
-        p = ProcNode(self.DummyProc({"a": int, "b": str}, {"c": int, "d": str}))
+        p = ProcNode0(self.DummyProc({"a": int, "b": str}, {"c": int, "d": str}))
         i1 = DataNode(int)
         i2 = DataNode(int)
         i3 = DataNode(str)
