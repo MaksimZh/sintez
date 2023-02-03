@@ -336,6 +336,9 @@ class Test_ProcNode(unittest.TestCase):
         p.add_output("d", o3)
         self.assertTrue(p.is_status("add_output", "OK"))
 
+        self.assertEqual(p.get_inputs(), {"a": i1, "b": i3})
+        self.assertEqual(p.get_outputs(), {"c": o1, "d": o3})
+
 
 if __name__ == "__main__":
     unittest.main()
