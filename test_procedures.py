@@ -244,6 +244,35 @@ class Test_DataNode(unittest.TestCase):
         self.assertEqual(d.get_outputs(), {o1, o2})
 
 
+    def test_put(self):
+        d = DataNode(int)
+        d.put("foo")
+        self.assertTrue(d.is_status("put", "INVALID_TYPE"))
+        self.assertFalse(d.is_valid())
+        d.put(1)
+        self.assertTrue(d.is_status("put", "OK"))
+        self.assertTrue(d.is_valid())
+
+
+    def test_invalidate(self):
+        d = DataNode(int)
+        d.invalidate()
+        self.assertFalse(d.is_valid())
+        d.put(1)
+        self.assertTrue(d.is_valid())
+        d.invalidate()
+        self.assertFalse(d.is_valid())
+
+
+    def test_get(self):
+        d = DataNode(int)
+        d.get()
+        self.assertTrue(d.is_status("get", "INVALID_DATA"))
+        d.put(1)
+        self.assertEqual(d.get(), 1)
+        self.assertTrue(d.is_status("get", "OK"))
+
+
 class Test_ProcNode(unittest.TestCase):
 
     class DummyProc(Procedure):

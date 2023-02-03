@@ -277,7 +277,12 @@ class DataNode(Status):
     # POST: data is `value`
     @status("OK", "INVALID_TYPE")
     def put(self, value: Any) -> None:
-        assert False
+        if not _type_fits(type(value), self.__type):
+            self._set_status("put", "INVALID_TYPE")
+            return
+        self.__is_valid = True
+        self.__data = value
+        self._set_status("put", "OK")
 
 
     # QUERIES
@@ -302,7 +307,11 @@ class DataNode(Status):
     # PRE: data is valid
     @status("OK", "INVALID_DATA")
     def get(self) -> Any:
-        assert False
+        if not self.is_valid():
+            self._set_status("get", "INVALID_DATA")
+            return None
+        self._set_status("get", "OK")
+        return self.__data
 
 
 # Procedure node for Composition
