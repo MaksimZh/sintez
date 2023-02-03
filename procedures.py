@@ -413,6 +413,9 @@ class ProcNode(Status):
 @final
 class Composition(Procedure):
 
+    __inputs: dict[str, DataNode]
+    __outputs: dict[str, DataNode]
+
     __input_slots: dict[str, type]
     __output_slots: dict[str, type]
     __input_proc: dict[str, dict[Procedure, str]]
@@ -421,12 +424,16 @@ class Composition(Procedure):
     __proc_output: dict[Procedure, dict[str, str]]
     __proc_to_run: set[Procedure]
 
+    ProcDescr = tuple[Procedure, dict[str, str], dict[str, str]]
     
     # CONSTRUCTOR
     @status("OK", "ERROR", name="init")
-    def __init__(self, contents: list[tuple[Procedure, dict[str, str], dict[str, str]]]) -> None:
+    def __init__(self, contents: list[ProcDescr]) -> None:
         super().__init__()
         self._set_status("init", "OK")
+        
+        data = dict[str, DataNode]()
+        
         input_slots = dict[str, type]()
         output_slots = dict[str, type]()
         self.__input_proc = dict()
@@ -435,27 +442,50 @@ class Composition(Procedure):
         self.__proc_output = dict()
         self.__proc_to_run = set()
         for proc, proc_inputs, proc_outputs in contents:
+        
+            proc_node = ProcNode(proc)
+            
             proc_input_slots = proc.get_input_slots()
             proc_output_slots = proc.get_output_slots()
             self.__proc_input[proc] = dict()
             self.__proc_output[proc] = dict()
             self.__proc_to_run.add(proc)
             for slot, name in proc_inputs.items():
+        
+                if name not in data:
+                    data[name] = DataNode(proc_input_slots[slot])
+                data_node = data[name]
+                assert _type_fits(proc_input_slots[slot], data_node.get_type())
+                proc_node.add_input(slot, data_node)
+                data_node.add_output(proc_node)
+                
                 input_slots[name] = proc_input_slots[slot]
                 if name not in self.__input_proc:
                     self.__input_proc[name] = dict()
                 self.__input_proc[name][proc] = slot
                 self.__proc_input[proc][slot] = name
+        
             for slot, name in proc_outputs.items():
+        
+                if name not in data:
+                    data[name] = DataNode(proc_output_slots[slot])
+                data_node = data[name]
+                assert _type_fits(proc_output_slots[slot], data_node.get_type())
+                proc_node.add_output(slot, data_node)
+                data_node.add_input(proc_node)
+                
                 output_slots[name] = proc_output_slots[slot]
                 self.__output_proc[name] = (proc, slot)
                 self.__proc_output[proc][slot] = name
-        for slot in input_slots.keys() & output_slots.keys():
-            del input_slots[slot]
-            del output_slots[slot]
-        self.__input_slots = input_slots
-        self.__output_slots = output_slots
-    
+
+        self.__input_slots = dict()
+        self.__output_slots = dict()
+        for name, data in data.items():
+            if data.get_input() is None:
+                self.__input_slots[name] = data.get_type()
+            if len(data.get_outputs()) == 0:
+                self.__output_slots[name] = data.get_type()
+
     
     # COMMANDS
 
