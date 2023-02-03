@@ -432,8 +432,6 @@ class Composition(Procedure):
         
         data = dict[str, DataNode]()
         
-        input_slots = dict[str, type]()
-        output_slots = dict[str, type]()
         self.__input_proc = dict()
         self.__output_proc = dict()
         self.__proc_input = dict()
@@ -457,7 +455,6 @@ class Composition(Procedure):
                 proc_node.add_input(slot, data_node)
                 data_node.add_output(proc_node)
                 
-                input_slots[name] = proc_input_slots[slot]
                 if name not in self.__input_proc:
                     self.__input_proc[name] = dict()
                 self.__input_proc[name][proc] = slot
@@ -472,7 +469,6 @@ class Composition(Procedure):
                 proc_node.add_output(slot, data_node)
                 data_node.add_input(proc_node)
                 
-                output_slots[name] = proc_output_slots[slot]
                 self.__output_proc[name] = (proc, slot)
                 self.__proc_output[proc][slot] = name
 
