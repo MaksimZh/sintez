@@ -416,8 +416,6 @@ class Composition(Procedure):
     __inputs: dict[str, DataNode]
     __outputs: dict[str, DataNode]
 
-    __input_slots: dict[str, type]
-    __output_slots: dict[str, type]
     __input_proc: dict[str, dict[Procedure, str]]
     __output_proc: dict[str, tuple[Procedure, str]]
     __proc_input: dict[Procedure, dict[str, str]]
@@ -478,13 +476,13 @@ class Composition(Procedure):
                 self.__output_proc[name] = (proc, slot)
                 self.__proc_output[proc][slot] = name
 
-        self.__input_slots = dict()
-        self.__output_slots = dict()
+        self.__inputs = dict()
+        self.__outputs = dict()
         for name, data in data.items():
             if data.get_input() is None:
-                self.__input_slots[name] = data.get_type()
+                self.__inputs[name] = data
             if len(data.get_outputs()) == 0:
-                self.__output_slots[name] = data.get_type()
+                self.__outputs[name] = data
 
     
     # COMMANDS
@@ -496,7 +494,7 @@ class Composition(Procedure):
     # POST: input value in slot `slot` is set to `value`
     @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE")
     def put(self, slot: str, value: Any) -> None:
-        if slot not in self.__input_slots:
+        if slot not in self.__inputs:
             self._set_status("put", "INVALID_SLOT")
             return
         for proc, input_slot in self.__input_proc[slot].items():
@@ -514,7 +512,7 @@ class Composition(Procedure):
     # POST: input values status set to unchanged
     @status("OK", "INVALID_INPUT", "RUN_FAILED")
     def run(self) -> None:
-        for name in self.__output_slots.keys():
+        for name in self.__outputs.keys():
             self.__validate_proc(self.__output_proc[name][0])
         assert(not self.needs_run())
         self._set_status("run", "OK")
@@ -552,11 +550,13 @@ class Composition(Procedure):
 
     # Get description of input slots
     def get_input_slots(self) -> dict[str, type]:
-        return self.__input_slots
+        return dict([(slot, data.get_type()) \
+            for slot, data in self.__inputs.items()])
 
     # Get description of output slots
     def get_output_slots(self) -> dict[str, type]:
-        return self.__output_slots
+        return dict([(slot, data.get_type()) \
+            for slot, data in self.__outputs.items()])
 
     # Check if the procedure needs run to update outputs
     def needs_run(self) -> bool:
