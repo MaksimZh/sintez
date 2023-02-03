@@ -246,14 +246,25 @@ class DataNode(Status):
     # POST: input is `input`
     @status("OK", "ALREADY_LINKED", "MULTIPLE_INPUTS")
     def add_input(self, input: "ProcNode") -> None:
-        assert False
+        if input is self.__input or input in self.__outputs:
+            self._set_status("add_input", "ALREADY_LINKED")
+            return
+        if self.__input is not None:
+            self._set_status("add_input", "MULTIPLE_INPUTS")
+            return
+        self.__input = input
+        self._set_status("add_input", "OK")
 
     # Add output procedure node
     # PRE: `output` is not in input or outputs
     # POST: `output` is in outputs
     @status("OK", "ALREADY_LINKED")
     def add_output(self, output: "ProcNode") -> None:
-        assert False
+        if output is self.__input or output in self.__outputs:
+            self._set_status("add_output", "ALREADY_LINKED")
+            return
+        self.__outputs.add(output)
+        self._set_status("add_output", "OK")
 
     # Mark node as invalid
     # POST: data is invalid
@@ -325,17 +336,45 @@ class ProcNode(Status):
     # PRE: `slot` is correct input slot
     # PRE: `input` is not in outputs
     # PRE: `input` type fits procedure input at `slot`
-    # POST: `input` is in inputs at `slot` 
+    # POST: `input` is in inputs at `slot`
+    @status("OK", "INVALID_SLOT", "SLOT_OCCUPIED", "ALREADY_LINKED", "INVALID_TYPE")
     def add_input(self, slot: str, input: DataNode) -> None:
-        assert False
+        if slot not in self.__proc.get_input_slots():
+            self._set_status("add_input", "INVALID_SLOT")
+            return
+        if slot in self.__inputs:
+            self._set_status("add_input", "SLOT_OCCUPIED")
+            return
+        if input in self.__inputs.values() or input in self.__outputs.values():
+            self._set_status("add_input", "ALREADY_LINKED")
+            return
+        if not _type_fits(input.get_type(), self.__proc.get_input_slots()[slot]):
+            self._set_status("add_input", "INVALID_TYPE")
+            return
+        self.__inputs[slot] = input
+        self._set_status("add_input", "OK")
 
     # Add output data node
     # PRE: `slot` is correct output slot
     # PRE: `output` is not in inputs or outputs
     # PRE: `output` type fits procedure output at `slot`
     # POST: `output` is in outputs at `slot` 
+    @status("OK", "INVALID_SLOT", "SLOT_OCCUPIED", "ALREADY_LINKED", "INVALID_TYPE")
     def add_output(self, slot: str, output: DataNode) -> None:
-        assert False
+        if slot not in self.__proc.get_output_slots():
+            self._set_status("add_output", "INVALID_SLOT")
+            return
+        if slot in self.__outputs:
+            self._set_status("add_output", "SLOT_OCCUPIED")
+            return
+        if output in self.__inputs.values() or output in self.__outputs.values():
+            self._set_status("add_output", "ALREADY_LINKED")
+            return
+        if not _type_fits(output.get_type(), self.__proc.get_output_slots()[slot]):
+            self._set_status("add_output", "INVALID_TYPE")
+            return
+        self.__outputs[slot] = output
+        self._set_status("add_output", "OK")
 
     # Mark that procedure needs run
     # POST: needs run
