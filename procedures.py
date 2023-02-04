@@ -385,6 +385,14 @@ class ProcNode(Node[InputNode, OutputNode]):
         return self.__proc
 
 
+def _invalidate_node(node: InputNode | OutputNode | ProcNode):
+    if not node.is_valid():
+        return
+    node.invalidate()
+    for output in node.get_outputs():
+        _invalidate_node(output)
+
+
 @final
 class Composition(Procedure):
 
@@ -503,7 +511,7 @@ class Composition(Procedure):
                 if not proc.is_status("put", "OK"):
                     self._set_status("put", proc.get_status("put"))
                     return
-                self.__invalidate_node(proc_node)
+                _invalidate_node(proc_node)
         self.__needs_run = True
         self._set_status("put", "OK")
 
@@ -518,14 +526,6 @@ class Composition(Procedure):
             self.__validate_proc(self.__output_proc[name][0])
         self.__needs_run = False
         self._set_status("run", "OK")
-
-    
-    def __invalidate_node(self, node: InputNode | OutputNode | ProcNode):
-        if not node.is_valid():
-            return
-        node.invalidate()
-        for output in node.get_outputs():
-            self.__invalidate_node(output)
 
 
     def __validate_proc(self, proc: Procedure):
