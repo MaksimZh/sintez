@@ -504,14 +504,10 @@ class Composition(Procedure):
             self._set_status("put", "INVALID_SLOT")
             return
         for input_node in self.__input_nodes[slot]:
-            input_node.validate()
-            for proc_node in input_node.get_outputs():
-                proc = proc_node.get_proc()
-                proc.put(input_node.get_slot(), value)
-                if not proc.is_status("put", "OK"):
-                    self._set_status("put", proc.get_status("put"))
-                    return
-                _invalidate_node(proc_node)
+            self.__put_data(input_node, value)
+            if not self.is_status("put_data", "OK"):
+                self._set_status("put", self.get_status("put_data"))
+                return
         self.__needs_run = True
         self._set_status("put", "OK")
 
@@ -526,6 +522,20 @@ class Composition(Procedure):
             self.__validate_proc(self.__output_proc[name][0])
         self.__needs_run = False
         self._set_status("run", "OK")
+
+    
+    @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE",
+        name="put_data")
+    def __put_data(self, input_node: InputNode, value: Any) -> None:
+        proc_node = next(iter(input_node.get_outputs()))
+        proc = proc_node.get_proc()
+        proc.put(input_node.get_slot(), value)
+        if not proc.is_status("put", "OK"):
+            self._set_status("put_data", proc.get_status("put"))
+            return
+        input_node.validate()
+        _invalidate_node(proc_node)
+        self._set_status("put_data", "OK")
 
 
     def __validate_proc(self, proc: Procedure):
