@@ -402,12 +402,6 @@ class Composition(Procedure):
     __output_slots: dict[str, type]
     __needs_run: bool
 
-    __input_proc: dict[str, dict[Procedure, str]]
-    __output_proc: dict[str, tuple[Procedure, str]]
-    __proc_input: dict[Procedure, dict[str, str]]
-    __proc_output: dict[Procedure, dict[str, str]]
-    __proc_to_run: set[Procedure]
-
     ProcDescr = tuple[Procedure, dict[str, str], dict[str, str]]
     
     # CONSTRUCTOR
@@ -421,49 +415,29 @@ class Composition(Procedure):
         output_nodes = dict[str, OutputNode]()
         procedures = set[ProcNode]()
         
-        self.__input_proc = dict()
-        self.__output_proc = dict()
-        self.__proc_input = dict()
-        self.__proc_output = dict()
-        self.__proc_to_run = set()
         for proc, proc_inputs, proc_outputs in contents:
-
             proc_node = ProcNode(proc)
             procedures.add(proc_node)
-        
             proc_input_slots = proc.get_input_slots()
             proc_output_slots = proc.get_output_slots()
-            self.__proc_input[proc] = dict()
-            self.__proc_output[proc] = dict()
-            self.__proc_to_run.add(proc)
-            for slot, name in proc_inputs.items():
 
+            for slot, name in proc_inputs.items():
                 if name not in input_nodes:
                     input_nodes[name] = set()
                 input_node = InputNode(slot, proc_input_slots[slot])
                 input_nodes[name].add(input_node)
                 input_node.add_output(proc_node)
                 proc_node.add_input(input_node)
-        
-                if name not in self.__input_proc:
-                    self.__input_proc[name] = dict()
-                self.__input_proc[name][proc] = slot
-                self.__proc_input[proc][slot] = name
-        
-            for slot, name in proc_outputs.items():
 
+            for slot, name in proc_outputs.items():
                 output_node = OutputNode(slot, proc_output_slots[slot])
                 output_nodes[name] = output_node
                 proc_node.add_output(output_node)
                 output_node.add_input(proc_node)
-        
                 if name not in output_nodes:
                     output_nodes[name] = OutputNode(slot, proc_output_slots[slot])
                 output_node = output_nodes[name]
                 assert _type_fits(proc_output_slots[slot], output_node.get_type())
-        
-                self.__output_proc[name] = (proc, slot)
-                self.__proc_output[proc][slot] = name
 
         internal_names = set[str]()
         for name, output_node in output_nodes.items():
@@ -599,9 +573,15 @@ class Composition(Procedure):
     # PRE: run was successful after last input change
     @status("OK", "INVALID_SLOT", "NEEDS_RUN")
     def get(self, slot: str) -> Any:
-        proc, output_slot = self.__output_proc[slot]
-        value = proc.get(output_slot)
-        self._set_status("get", proc.get_status("get"))
+        if slot not in self.__output_nodes:
+            self._set_status("get", "INVALID_SLOT")
+            return None
+        if self.needs_run():
+            self._set_status("get", "NEEDS_RUN")
+            return None
+        output_node = self.__output_nodes[slot]
+        value = self.__get_data(output_node)
+        self._set_status("get", "OK")
         return value
 
 
