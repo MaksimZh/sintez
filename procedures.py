@@ -477,6 +477,9 @@ class Composition(Procedure):
         if slot not in self.__input_slots:
             self._set_status("put", "INVALID_SLOT")
             return
+        if not _type_fits(type(value), self.__input_slots[slot]):
+            self._set_status("put", "INVALID_TYPE")
+            return
         for input_node in self.__input_nodes[slot]:
             self.__put_data(input_node, value)
             if not self.is_status("put_data", "OK"):
@@ -498,16 +501,16 @@ class Composition(Procedure):
         self._set_status("run", "OK")
 
     
-    @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE",
-        name="put_data")
+    @status("OK", "INVALID_VALUE", name="put_data")
     def __put_data(self, input_node: InputNode, value: Any) -> None:
         assert len(input_node.get_outputs()) == 1
         proc_node = next(iter(input_node.get_outputs()))
         proc = proc_node.get_proc()
         proc.put(input_node.get_slot(), value)
-        if not proc.is_status("put", "OK"):
-            self._set_status("put_data", proc.get_status("put"))
+        if proc.is_status("put", "INVALID_VALUE"):
+            self._set_status("put_data", "INVALID_VALUE")
             return
+        assert proc.is_status("put", "OK")
         input_node.validate()
         _invalidate_node(proc_node)
         self._set_status("put_data", "OK")
