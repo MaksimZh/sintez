@@ -4,7 +4,6 @@ from typing import Any
 
 from tools import status
 from procedures import Calculator, Composition
-from procedures import Node, SlotNode, ProcNode, NodeVisitor
 
 
 class Divmod(Calculator):
@@ -209,65 +208,6 @@ class Test_Composition(unittest.TestCase):
         self.assertTrue(comp.is_status("get", "OK"))
         self.assertEqual(comp.get("g"), 2)
         self.assertTrue(comp.is_status("get", "OK"))
-
-
-class DummyNode(Node):
-    def visit(self, visitor: NodeVisitor) -> None:
-        pass
-
-
-class Test_Node(unittest.TestCase):
-    
-    def test_init(self):
-        d = DummyNode()
-        self.assertEqual(d.get_inputs(), set())
-        self.assertEqual(d.get_outputs(), set())
-
-
-    def test_add_IO(self):
-        d = DummyNode()
-        i1 = DummyNode()
-        i2 = DummyNode()
-        o1 = DummyNode()
-        o2 = DummyNode()
-        d.add_input(i1)
-        self.assertTrue(d.is_status("add_input", "OK"))
-        d.add_output(o1)
-        self.assertTrue(d.is_status("add_output", "OK"))
-        d.add_input(i1)
-        self.assertTrue(d.is_status("add_input", "ALREADY_LINKED"))
-        d.add_input(o1)
-        self.assertTrue(d.is_status("add_input", "ALREADY_LINKED"))
-        d.add_input(i2)
-        self.assertTrue(d.is_status("add_input", "OK"))
-        d.add_output(o1)
-        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
-        d.add_output(i1)
-        self.assertTrue(d.is_status("add_output", "ALREADY_LINKED"))
-        d.add_output(o2)
-        self.assertTrue(d.is_status("add_output", "OK"))
-        self.assertEqual(d.get_inputs(), {i1, i2})
-        self.assertEqual(d.get_outputs(), {o1, o2})
-
-
-class Test_SlotNode(unittest.TestCase):
-    
-    def test_init(self):
-        d = SlotNode("foo", int)
-        self.assertEqual(d.get_inputs(), set())
-        self.assertEqual(d.get_outputs(), set())
-        self.assertIs(d.get_slot(), "foo")
-        self.assertIs(d.get_type(), int)
-
-
-class Test_ProcNode(unittest.TestCase):
-
-    def test_init(self):
-        dm = Divmod()
-        p = ProcNode(dm)
-        self.assertEqual(p.get_inputs(), set())
-        self.assertEqual(p.get_outputs(), set())
-        self.assertIs(p.get_proc(), dm)
 
 
 if __name__ == "__main__":

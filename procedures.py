@@ -1,5 +1,5 @@
-from typing import Any, final, Optional
-from abc import ABC, abstractmethod
+from typing import Any, final, Optional, Generic, TypeVar
+from abc import abstractmethod
 from tools import Status, status, StatusMeta
 
 
@@ -209,96 +209,109 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
         assert False
 
 
-# Base node class for Composition
-# CONTAINS:
-#   - input nodes
-#   - output nodes
-class Node(Status):
+Input = TypeVar("Input")
+Output = TypeVar("Output")
 
-    __inputs: set["Node"]
-    __outputs: set["Node"]
+
+# Generic base node class for Composition
+# CONTAINS:
+#   - inputs (may be limited to single)
+#   - outputs (may be limited to single)
+#   - status (valid or not)
+class Node(Generic[Input, Output], Status):
+
+    __inputs: set[Input]
+    __outputs: set[Output]
+    __single_input: bool
+    __single_output: bool
+    __is_valid: bool
 
 
     # CONSTRUCTOR
     # POST: no inputs
     # POST: no outputs
-    def __init__(self) -> None:
-        super().__init__()
+    # POST: node is invalid
+    def __init__(self, single_input: bool, single_output: bool) -> None:
+        Status.__init__(self)
         self.__inputs = set()
         self.__outputs = set()
+        self.__single_input = single_input
+        self.__single_output = single_output
+        self.__is_valid = False
 
 
     # COMMANDS
 
     # Add input node
     # PRE: `input` is not in inputs or outputs
+    # PRE: inputs not full
     # POST: `input` is in inputs
-    @status("OK", "ALREADY_LINKED")
-    def add_input(self, input: "Node") -> None:
+    @status("OK", "ALREADY_LINKED", "TOO_MANY_LINKS")
+    def add_input(self, input: Input) -> None:
         if input in self.__inputs or input in self.__outputs:
             self._set_status("add_input", "ALREADY_LINKED")
+            return
+        if self.__single_input and len(self.__inputs) > 0:
+            self._set_status("add_input", "TOO_MANY_LINKS")
             return
         self.__inputs.add(input)
         self._set_status("add_input", "OK")
 
     # Add output node
     # PRE: `output` is not in input or outputs
+    # PRE: outputs not full
     # POST: `output` is in outputs
-    @status("OK", "ALREADY_LINKED")
-    def add_output(self, output: "Node") -> None:
+    @status("OK", "ALREADY_LINKED", "TOO_MANY_LINKS")
+    def add_output(self, output: Output) -> None:
         if output in self.__inputs or output in self.__outputs:
             self._set_status("add_output", "ALREADY_LINKED")
+            return
+        if self.__single_output and len(self.__outputs) > 0:
+            self._set_status("add_output", "TOO_MANY_LINKS")
             return
         self.__outputs.add(output)
         self._set_status("add_output", "OK")
 
+    # Mark node as valid
+    def validate(self) -> None:
+        self.__is_valid = True
 
-    # Apply custom operation
-    # POST: visitor method called with this object
-    @abstractmethod
-    def visit(self, visitor: "NodeVisitor") -> None:
-        assert False
+    # Mark node as invalid
+    def invalidate(self) -> None:
+        self.__is_valid = False
 
     
     # QUERIES
 
     # Get input
-    def get_inputs(self) -> set["Node"]:
+    def get_inputs(self) -> set[Input]:
         return self.__inputs.copy()
 
     # Get outputs
-    def get_outputs(self) -> set["Node"]:
+    def get_outputs(self) -> set[Output]:
         return self.__outputs.copy()
 
+    # Check node status
+    def is_valid(self) -> bool:
+        return self.__is_valid
 
-# Slot node for Composition
-# INHERITED:
-#   - input nodes
-#   - output nodes
+
+# Slot mixin for nodes
 # CONTAINS:
 #   - slot id
 #   - data type
-class SlotNode(Node):
+class SlotMixin(Status):
 
     __slot: str
     __type: type
 
     # CONSTRUCTOR
-    # POST: no inputs
-    # POST: no outputs
     # POST: slot id is `slot`
     # POST: data type is `data_type`
     def __init__(self, slot: str, data_type: type) -> None:
-        super().__init__()
+        Status.__init__(self)
         self.__slot = slot
         self.__type = data_type
-
-    
-    # COMMANDS
-
-    # Apply custom operation
-    def visit(self, visitor: "NodeVisitor") -> None:
-        visitor.visit_slot_node(self)
 
 
     # QUERIES
@@ -312,13 +325,48 @@ class SlotNode(Node):
         return self.__type
 
 
+# Input slot node for Composition
+# CONTAINS:
+#   - up to one input OutputNode
+#   - up to one output ProcNode
+#   - slot id
+#   - data type
+class InputNode(Node["OutputNode", "ProcNode"], SlotMixin):
+
+    # CONSTRUCTOR
+    # POST: no input
+    # POST: no output
+    # POST: slot id is `slot`
+    # POST: data type is `data_type`
+    def __init__(self, slot: str, data_type: type) -> None:
+        Node.__init__(self, True, True)
+        SlotMixin.__init__(self, slot, data_type)
+
+
+# Output slot node for Composition
+# CONTAINS:
+#   - up to one input ProcNode
+#   - outputs (InputNode)
+#   - slot id
+#   - data type
+class OutputNode(Node["ProcNode", "InputNode"], SlotMixin):
+
+    # CONSTRUCTOR
+    # POST: no input
+    # POST: no outputs
+    # POST: slot id is `slot`
+    # POST: data type is `data_type`
+    def __init__(self, slot: str, data_type: type) -> None:
+        Node.__init__(self, True, False)
+        SlotMixin.__init__(self, slot, data_type)
+
+
 # Slot node for Composition
 # INHERITED:
 #   - input nodes
 #   - output nodes
-# CONTAINS:
 #   - procedure
-class ProcNode(Node):
+class ProcNode(Node[InputNode, OutputNode]):
 
     __proc: Procedure
 
@@ -326,18 +374,9 @@ class ProcNode(Node):
     # POST: no inputs
     # POST: no outputs
     # POST: procedure is `proc`
-    # POST: type is `data_type`
     def __init__(self, proc: Procedure) -> None:
-        super().__init__()
+        super().__init__(False, False)
         self.__proc = proc
-
-    
-    # COMMANDS
-
-    # Apply custom operation
-    def visit(self, visitor: "NodeVisitor") -> None:
-        visitor.visit_proc_node(self)
-
 
     # QUERIES
     
@@ -346,21 +385,14 @@ class ProcNode(Node):
         return self.__proc
 
 
-class NodeVisitor(ABC):
-    @abstractmethod
-    def visit_slot_node(self, node: SlotNode) -> None:
-        assert False
-
-    @abstractmethod
-    def visit_proc_node(self, node: ProcNode) -> None:
-        assert False
-
-
 @final
 class Composition(Procedure):
 
+    __input_nodes: dict[str, set[InputNode]]
+    __output_nodes: dict[str, OutputNode]
     __input_slots: dict[str, type]
     __output_slots: dict[str, type]
+    __needs_run: bool
 
     __input_proc: dict[str, dict[Procedure, str]]
     __output_proc: dict[str, tuple[Procedure, str]]
@@ -374,10 +406,11 @@ class Composition(Procedure):
     @status("OK", "ERROR", name="init")
     def __init__(self, contents: list[ProcDescr]) -> None:
         super().__init__()
+        self.__needs_run = True
         self._set_status("init", "OK")
 
-        input_nodes = dict[str, set[SlotNode]]()
-        output_nodes = dict[str, SlotNode]()
+        input_nodes = dict[str, set[InputNode]]()
+        output_nodes = dict[str, OutputNode]()
         procedures = set[ProcNode]()
         
         self.__input_proc = dict()
@@ -399,10 +432,10 @@ class Composition(Procedure):
 
                 if name not in input_nodes:
                     input_nodes[name] = set()
-                slot_node = SlotNode(slot, proc_input_slots[slot])
-                input_nodes[name].add(slot_node)
-                slot_node.add_output(proc_node)
-                proc_node.add_input(slot_node)
+                input_node = InputNode(slot, proc_input_slots[slot])
+                input_nodes[name].add(input_node)
+                input_node.add_output(proc_node)
+                proc_node.add_input(input_node)
         
                 if name not in self.__input_proc:
                     self.__input_proc[name] = dict()
@@ -411,15 +444,15 @@ class Composition(Procedure):
         
             for slot, name in proc_outputs.items():
 
-                slot_node = SlotNode(slot, proc_output_slots[slot])
-                output_nodes[name] = slot_node
-                proc_node.add_output(slot_node)
-                slot_node.add_input(proc_node)
+                output_node = OutputNode(slot, proc_output_slots[slot])
+                output_nodes[name] = output_node
+                proc_node.add_output(output_node)
+                output_node.add_input(proc_node)
         
                 if name not in output_nodes:
-                    output_nodes[name] = SlotNode(slot, proc_output_slots[slot])
-                slot_node = output_nodes[name]
-                assert _type_fits(proc_output_slots[slot], slot_node.get_type())
+                    output_nodes[name] = OutputNode(slot, proc_output_slots[slot])
+                output_node = output_nodes[name]
+                assert _type_fits(proc_output_slots[slot], output_node.get_type())
         
                 self.__output_proc[name] = (proc, slot)
                 self.__proc_output[proc][slot] = name
@@ -436,6 +469,9 @@ class Composition(Procedure):
         for name in internal_names:
             del input_nodes[name]
             del output_nodes[name]
+
+        self.__input_nodes = input_nodes
+        self.__output_nodes = output_nodes
         
         self.__input_slots = dict[str, type]()
         for name, nodes in input_nodes.items():
@@ -459,12 +495,16 @@ class Composition(Procedure):
         if slot not in self.__input_slots:
             self._set_status("put", "INVALID_SLOT")
             return
-        for proc, input_slot in self.__input_proc[slot].items():
-            proc.put(input_slot, value)
-            if not proc.is_status("put", "OK"):
-                self._set_status("put", proc.get_status("put"))
-                return
-            self.__invalidate_proc(proc)
+        for input_node in self.__input_nodes[slot]:
+            input_node.validate()
+            for proc_node in input_node.get_outputs():
+                proc = proc_node.get_proc()
+                proc.put(input_node.get_slot(), value)
+                if not proc.is_status("put", "OK"):
+                    self._set_status("put", proc.get_status("put"))
+                    return
+                self.__invalidate_node(proc_node)
+        self.__needs_run = True
         self._set_status("put", "OK")
 
 
@@ -476,19 +516,16 @@ class Composition(Procedure):
     def run(self) -> None:
         for name in self.__output_slots:
             self.__validate_proc(self.__output_proc[name][0])
-        assert(not self.needs_run())
+        self.__needs_run = False
         self._set_status("run", "OK")
 
     
-    def __invalidate_proc(self, proc: Procedure):
-        if proc in self.__proc_to_run:
+    def __invalidate_node(self, node: InputNode | OutputNode | ProcNode):
+        if not node.is_valid():
             return
-        self.__proc_to_run.add(proc)
-        for _, name in self.__proc_output[proc].items():
-            if name not in self.__input_proc:
-                continue
-            for other_proc, _ in self.__input_proc[name].items():
-                self.__invalidate_proc(other_proc)
+        node.invalidate()
+        for output in node.get_outputs():
+            self.__invalidate_node(output)
 
 
     def __validate_proc(self, proc: Procedure):
@@ -520,7 +557,7 @@ class Composition(Procedure):
 
     # Check if the procedure needs run to update outputs
     def needs_run(self) -> bool:
-        return len(self.__proc_to_run) > 0
+        return self.__needs_run
 
     # Get output value
     # PRE: slot is valid output slot name
