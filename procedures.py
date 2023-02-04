@@ -518,8 +518,8 @@ class Composition(Procedure):
     # POST: input values status set to unchanged
     @status("OK", "INVALID_INPUT", "RUN_FAILED")
     def run(self) -> None:
-        for name in self.__output_slots:
-            self.__validate_proc(self.__output_proc[name][0])
+        for _, node in self.__output_nodes.items():
+            self.__validate_output_node(node)
         self.__needs_run = False
         self._set_status("run", "OK")
 
@@ -527,6 +527,7 @@ class Composition(Procedure):
     @status("OK", "INVALID_SLOT", "INVALID_TYPE", "INVALID_VALUE",
         name="put_data")
     def __put_data(self, input_node: InputNode, value: Any) -> None:
+        assert len(input_node.get_outputs()) == 1
         proc_node = next(iter(input_node.get_outputs()))
         proc = proc_node.get_proc()
         proc.put(input_node.get_slot(), value)
@@ -538,21 +539,45 @@ class Composition(Procedure):
         self._set_status("put_data", "OK")
 
 
-    def __validate_proc(self, proc: Procedure):
-        if proc not in self.__proc_to_run:
+    def __validate_output_node(self, output_node: OutputNode) -> None:
+        if output_node.is_valid():
             return
-        for _, name in self.__proc_input[proc].items():
-            if name not in self.__output_proc:
-                continue
-            self.__validate_proc(self.__output_proc[name][0])
+        assert len(output_node.get_inputs()) == 1
+        proc_node = next(iter(output_node.get_inputs()))
+        self.__validate_proc_node(proc_node)
+        output_node.validate()
+
+
+    def __validate_proc_node(self, proc_node: ProcNode):
+        if proc_node.is_valid():
+            return
+        for input_node in proc_node.get_inputs():
+            self.__validate_input_node(input_node)
+        proc = proc_node.get_proc()
         proc.run()
-        for slot, name in self.__proc_output[proc].items():
-            if name not in self.__input_proc:
-                continue
-            value = proc.get(slot)
-            for dest_proc, dest_slot in self.__input_proc[name].items():
-                dest_proc.put(dest_slot, value)
-        self.__proc_to_run.remove(proc)
+        proc_node.validate()
+        for output_node in proc_node.get_outputs():
+            value = self.__get_data(output_node)
+            for dest_node in output_node.get_outputs():
+                self.__put_data(dest_node, value)
+
+
+    def __validate_input_node(self, input_node: InputNode) -> None:
+        if input_node.is_valid():
+            return
+        assert len(input_node.get_inputs()) == 1
+        source_node = next(iter(input_node.get_inputs()))
+        self.__validate_output_node(source_node)
+        input_node.validate()
+
+
+    def __get_data(self, output_node: OutputNode) -> Any:
+        assert len(output_node.get_inputs()) == 1
+        proc_node = next(iter(output_node.get_inputs()))
+        proc = proc_node.get_proc()
+        value = proc.get(output_node.get_slot())
+        assert proc.is_status("get", "OK")
+        return value
 
 
     # QUERIES
