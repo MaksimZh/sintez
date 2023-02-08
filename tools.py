@@ -1,11 +1,12 @@
-from typing import Any, Callable, final
+from typing import Any, Callable, final, TypeVar
 from abc import ABC, ABCMeta
 
 _METHOD_STATUS_NAME = "__method_status_name"
 _METHOD_STATUSES = "__method_statuses"
 _CLASS_STATUSES = "__class_statuses"
 
-AnyFunc = Callable[..., Any]
+T = TypeVar("T")
+AnyFunc = Callable[..., T]
 
 # Decorator that adds status management to method
 # and defines allowed status values.
@@ -33,14 +34,14 @@ AnyFunc = Callable[..., Any]
 #    def method4(self):
 #        ...
 #
-def status(*args: str, **kwargs: str) -> Callable[[AnyFunc], AnyFunc]:
+def status(*args: str, **kwargs: str) -> Callable[[AnyFunc[T]], AnyFunc[T]]:
     assert len(set(kwargs.keys()).difference(set(["name"]))) == 0, \
         f"Only 'name' keyword argument accepted"
     status_name = kwargs.get("name", "")
     status_values = set(args)
     if len(status_values) > 0 and "NIL" not in status_values:
         status_values.add("NIL")
-    def decorator(func: AnyFunc) -> AnyFunc:
+    def decorator(func: AnyFunc[T]) -> AnyFunc[T]:
         setattr(func, _METHOD_STATUSES, status_values)
         setattr(func, _METHOD_STATUS_NAME, status_name)
         return func
