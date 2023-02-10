@@ -6,65 +6,89 @@ from procedures import _type_fits
 
 T = TypeVar("T")
 
-
-class DataSource(Generic[T], Status):
-    
-    @abstractmethod
-    def get_type(self) -> Type[T]:
-        assert False
+# Interface for data input
+# Generic argument is used in `Calculator`
+# CONTAINS:
+#   - data
+#   - data type
+#   - data state (no data, new data, used data)
+class Input(Generic[T], Status):
 
     class State(Enum):
         NONE = auto(),
         NEW = auto(),
         USED = auto(),
 
-    @abstractmethod
-    def get_state(self) -> State:
-        assert False
+    # COMMANDS
 
+    # Mark data as used
+    # PRE: data state is not `NONE`
     @abstractmethod
     @status("OK", "NO_DATA")
-    def get(self) -> T:
+    def mark_used(self) -> None:
         assert False
-        
-
-class DataDest(Generic[T], Status):
     
+    
+    # QUERIES
+
+    # Get data type
     @abstractmethod
     def get_type(self) -> Type[T]:
         assert False
 
+    # Get data state
+    @abstractmethod
+    def get_state(self) -> State:
+        assert False
+
+    # Get data
+    # PRE: data state is not `NONE`
+    @abstractmethod
+    @status("OK", "NO_DATA")
+    def get(self) -> T:
+        assert False
+
+
+# Interface for data output
+# Generic argument is used in `Calculator`
+# CONTAINS:
+#   - data
+#   - data type
+class Output(Generic[T], Status):
+
+    # COMMANDS
+
+    # Set data
+    # PRE: `value` type fits data type
     @abstractmethod
     @status("OK", "INVALID_TYPE")
     def set(self, value: T) -> None:
         assert False
+    
+    
+    # QUERIES
+    
+    # Get data type
+    @abstractmethod
+    def get_type(self) -> Type[T]:
+        assert False
 
 
-class DataSlot(DataSource[Any], DataDest[Any]):
+# Slot containing data
+# CONTAINS:
+#   - data
+#   - data type
+#   - data state (no data, new data, used data)
+class Slot(Input[Any], Output[Any]):
     
     __type: type
     __value: Any
-    __state: DataSource.State
+    __state: Input.State
 
     def __init__(self, data_type: type) -> None:
         super().__init__()
         self.__type = data_type
         self.__state = self.State.NONE
-    
-    def get_type(self) -> Type[Any]:
-        return self.__type
-
-    def get_state(self) -> DataSource.State:
-        return self.__state
-
-    @status("OK", "NO_DATA")
-    def get(self) -> Any:
-        if self.__state == DataSource.State.NONE:
-            self._set_status("get", "NO_DATA")
-            return None
-        self._set_status("get", "OK")
-        self.__state = self.State.USED
-        return self.__value
 
     @status("OK", "INVALID_TYPE")
     def set(self, value: Any) -> None:
@@ -75,47 +99,70 @@ class DataSlot(DataSource[Any], DataDest[Any]):
         self.__state = self.State.NEW
         self.__value = value
 
+    @status("OK", "NO_DATA")
+    def mark_used(self) -> None:
+        if self.__state == Input.State.NONE:
+            self._set_status("mark_used", "NO_DATA")
+            return
+        self.__state = self.State.USED
+        self._set_status("mark_used", "OK")
+    
+    def get_type(self) -> Type[Any]:
+        return self.__type
 
+    def get_state(self) -> Input.State:
+        return self.__state
+
+    @status("OK", "NO_DATA")
+    def get(self) -> Any:
+        if self.__state == Input.State.NONE:
+            self._set_status("get", "NO_DATA")
+            return None
+        self._set_status("get", "OK")
+        return self.__value
+
+
+# Procedure interface
+# CONTAINS:
+#   - input slots
+#   - output slots
+#   - calculations to run
 class Procedure(Status):
 
-    @classmethod
-    @abstractmethod
-    def get_input_spec(cls) -> dict[str, type]:
-        assert False
+    # COMMANDS
 
-    @abstractmethod
-    def get_inputs_id(self) -> set[str]:
-        assert False
-
-    @abstractmethod
-    def get_outputs_id(self) -> set[str]:
-        assert False
-
-    @abstractmethod
-    @status("OK", "INVALID_ID")
-    def get_input(self, id: str) -> DataDest[Any]:
-        assert False
-
-    @abstractmethod
-    @status("OK", "INVALID_ID")
-    def get_output(self, id: str) -> DataSource[Any]:
-        assert False
-
+    # Run calculations
+    # PRE: all inputs have data
+    # PRE: input data lead to successfull calculation
+    # POST: all outputs have data
     @abstractmethod
     @status("OK", "INVALID_INPUT", "INTERNAL_ERROR")
     def run(self) -> None:
         assert False
 
 
-class Foo:
-    
-    __left: DataSource[int]
-    __right: DataSource[int]
-    __quotient: DataDest[int]
-    __remainder: DataDest[int]
+    # QUERIES
 
-    def __init__(self) -> None:
-        self.__left = DataSlot(int)
-        self.__right = DataSlot(int)
-        self.__quotient = DataSlot(int)
-        self.__remainder = DataSlot(int)
+    # Get IDs of input slots
+    @abstractmethod
+    def get_input_ids(self) -> set[str]:
+        assert False
+
+    # Get IDs of output slots
+    @abstractmethod
+    def get_output_ids(self) -> set[str]:
+        assert False
+
+    # Get input slot
+    # PRE: `id` is valid input slot ID
+    @abstractmethod
+    @status("OK", "INVALID_ID")
+    def get_input(self, id: str) -> Output[Any]:
+        assert False
+
+    # Get output slot
+    # PRE: `id` is valid output slot ID
+    @abstractmethod
+    @status("OK", "INVALID_ID")
+    def get_output(self, id: str) -> Input[Any]:
+        assert False
