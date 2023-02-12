@@ -186,6 +186,10 @@ class Procedure(Status):
         assert False
 
 
+class Calculator(Procedure):
+    pass
+
+
 def _type_fits(t: type, required: type) -> bool:
     if issubclass(t, required):
         return True

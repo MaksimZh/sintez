@@ -1,6 +1,6 @@
 import unittest
 
-from procedure import Slot
+from procedure import Slot, Calculator, DataSource, DataDest
 
 
 class Test_Slot(unittest.TestCase):
@@ -41,3 +41,17 @@ class Test_Slot(unittest.TestCase):
         s.set(1)
         self.assertEqual(s.get(), 1)
         self.assertTrue(s.is_status("get", "OK"))
+
+
+class Divmod(Calculator):
+    
+    __left: DataSource[int]
+    __right: DataSource[int]
+    __quotient: DataDest[int]
+    __remainder: DataDest[int]
+
+
+class Test_Calculator(unittest.TestCase):
+
+    def test(self):
+        pass
