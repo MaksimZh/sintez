@@ -12,7 +12,7 @@ T = TypeVar("T")
 #   - data
 #   - data type
 #   - data state (no data, new data, used data)
-class Input(Generic[T], Status):
+class DataSource(Generic[T], Status):
 
     class State(Enum):
         NONE = auto(),
@@ -54,7 +54,7 @@ class Input(Generic[T], Status):
 # CONTAINS:
 #   - data
 #   - data type
-class Output(Generic[T], Status):
+class DataDest(Generic[T], Status):
 
     # COMMANDS
 
@@ -79,11 +79,11 @@ class Output(Generic[T], Status):
 #   - data
 #   - data type
 #   - data state (no data, new data, used data)
-class Slot(Input[Any], Output[Any]):
+class Slot(DataSource[Any], DataDest[Any]):
     
     __type: type
     __value: Any
-    __state: Input.State
+    __state: DataSource.State
 
     def __init__(self, data_type: type) -> None:
         super().__init__()
@@ -101,7 +101,7 @@ class Slot(Input[Any], Output[Any]):
 
     @status("OK", "NO_DATA")
     def mark_used(self) -> None:
-        if self.__state == Input.State.NONE:
+        if self.__state == DataSource.State.NONE:
             self._set_status("mark_used", "NO_DATA")
             return
         self.__state = self.State.USED
@@ -110,12 +110,12 @@ class Slot(Input[Any], Output[Any]):
     def get_type(self) -> Type[Any]:
         return self.__type
 
-    def get_state(self) -> Input.State:
+    def get_state(self) -> DataSource.State:
         return self.__state
 
     @status("OK", "NO_DATA")
     def get(self) -> Any:
-        if self.__state == Input.State.NONE:
+        if self.__state == DataSource.State.NONE:
             self._set_status("get", "NO_DATA")
             return None
         self._set_status("get", "OK")
@@ -157,12 +157,12 @@ class Procedure(Status):
     # PRE: `id` is valid input slot ID
     @abstractmethod
     @status("OK", "INVALID_ID")
-    def get_input(self, id: str) -> Output[Any]:
+    def get_input(self, id: str) -> DataDest[Any]:
         assert False
 
     # Get output slot
     # PRE: `id` is valid output slot ID
     @abstractmethod
     @status("OK", "INVALID_ID")
-    def get_output(self, id: str) -> Input[Any]:
+    def get_output(self, id: str) -> DataSource[Any]:
         assert False
