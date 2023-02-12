@@ -2,7 +2,7 @@ from typing import TypeVar, Type, Any, Generic
 from abc import abstractmethod
 from enum import Enum, auto
 from tools import Status, status
-from procedures import _type_fits
+
 
 T = TypeVar("T")
 
@@ -84,12 +84,21 @@ class Slot(DataSource[Any], DataDest[Any]):
     __type: type
     __value: Any
     __state: DataSource.State
-
+    
+    
+    # CONSTRUCTOR
+    # POST: data type is `data_type`
+    # POST: state is `NONE`
     def __init__(self, data_type: type) -> None:
         super().__init__()
         self.__type = data_type
         self.__state = self.State.NONE
 
+    
+    # COMMANDS
+
+    # Set data
+    # PRE: `value` type fits data type
     @status("OK", "INVALID_TYPE")
     def set(self, value: Any) -> None:
         if not _type_fits(type(value), self.__type):
@@ -99,6 +108,8 @@ class Slot(DataSource[Any], DataDest[Any]):
         self.__state = self.State.NEW
         self.__value = value
 
+    # Mark data as used
+    # PRE: data state is not `NONE`
     @status("OK", "NO_DATA")
     def mark_used(self) -> None:
         if self.__state == DataSource.State.NONE:
@@ -107,12 +118,19 @@ class Slot(DataSource[Any], DataDest[Any]):
         self.__state = self.State.USED
         self._set_status("mark_used", "OK")
     
+    
+    # QUERIES
+    
+    # Get data type
     def get_type(self) -> Type[Any]:
         return self.__type
 
+    # Get data state
     def get_state(self) -> DataSource.State:
         return self.__state
 
+    # Get data
+    # PRE: data state is not `NONE`
     @status("OK", "NO_DATA")
     def get(self) -> Any:
         if self.__state == DataSource.State.NONE:
@@ -166,3 +184,13 @@ class Procedure(Status):
     @status("OK", "INVALID_ID")
     def get_output(self, id: str) -> DataSource[Any]:
         assert False
+
+
+def _type_fits(t: type, required: type) -> bool:
+    if issubclass(t, required):
+        return True
+    if required is complex:
+        return t is int or t is float
+    if required is float:
+        return t is int
+    return False
