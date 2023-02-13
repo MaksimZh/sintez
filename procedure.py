@@ -229,6 +229,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
     __output_fields: dict[str, str]
 
     # CONSTRUCTOR
+    # POST: all `Input` and `Output` fields contain slots of specified types
     def __init__(self) -> None:
         super().__init__()
         self.__input_fields = dict()
@@ -244,6 +245,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
     # COMMANDS
 
     # Run calculations
+    # Checks inputs then calls `calculate` method and then checks outputs
     # PRE: all inputs have data
     # PRE: input data lead to successfull calculation
     # POST: all outputs have data
@@ -266,6 +268,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
         self._set_status("run", "OK")
 
     # Run calculations
+    # To be implemented in child classes
     # PRE: input data lead to successfull calculation
     # POST: all outputs have data
     @abstractmethod
