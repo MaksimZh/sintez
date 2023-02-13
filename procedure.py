@@ -1,7 +1,7 @@
-from typing import TypeVar, Type, Any, Generic
+from typing import TypeVar, Type, Any, Generic, get_origin, get_args
 from abc import abstractmethod
 from enum import Enum, auto
-from tools import Status, status
+from tools import Status, status, StatusMeta
 
 
 T = TypeVar("T")
@@ -12,7 +12,7 @@ T = TypeVar("T")
 #   - data
 #   - data type
 #   - data state (no data, new data, used data)
-class DataSource(Generic[T], Status):
+class Input(Generic[T], Status):
 
     class State(Enum):
         NONE = auto(),
@@ -54,7 +54,7 @@ class DataSource(Generic[T], Status):
 # CONTAINS:
 #   - data
 #   - data type
-class DataDest(Generic[T], Status):
+class Output(Generic[T], Status):
 
     # COMMANDS
 
@@ -74,16 +74,20 @@ class DataDest(Generic[T], Status):
         assert False
 
 
+DataSource = Input[Any]
+DataDest = Output[Any]
+
+
 # Slot containing data
 # CONTAINS:
 #   - data
 #   - data type
 #   - data state (no data, new data, used data)
-class Slot(DataSource[Any], DataDest[Any]):
+class Slot(DataSource, DataDest):
     
     __type: type
     __value: Any
-    __state: DataSource.State
+    __state: Input.State
     
     
     # CONSTRUCTOR
@@ -112,7 +116,7 @@ class Slot(DataSource[Any], DataDest[Any]):
     # PRE: data state is not `NONE`
     @status("OK", "NO_DATA")
     def mark_used(self) -> None:
-        if self.__state == DataSource.State.NONE:
+        if self.__state == Input.State.NONE:
             self._set_status("mark_used", "NO_DATA")
             return
         self.__state = self.State.USED
@@ -126,14 +130,14 @@ class Slot(DataSource[Any], DataDest[Any]):
         return self.__type
 
     # Get data state
-    def get_state(self) -> DataSource.State:
+    def get_state(self) -> Input.State:
         return self.__state
 
     # Get data
     # PRE: data state is not `NONE`
     @status("OK", "NO_DATA")
     def get(self) -> Any:
-        if self.__state == DataSource.State.NONE:
+        if self.__state == Input.State.NONE:
             self._set_status("get", "NO_DATA")
             return None
         self._set_status("get", "OK")
@@ -175,19 +179,130 @@ class Procedure(Status):
     # PRE: `id` is valid input slot ID
     @abstractmethod
     @status("OK", "INVALID_ID")
-    def get_input(self, id: str) -> DataDest[Any]:
+    def get_input(self, id: str) -> DataDest:
         assert False
 
     # Get output slot
     # PRE: `id` is valid output slot ID
     @abstractmethod
     @status("OK", "INVALID_ID")
-    def get_output(self, id: str) -> DataSource[Any]:
+    def get_output(self, id: str) -> DataSource:
         assert False
 
 
-class Calculator(Procedure):
-    pass
+class CalculatorMeta(StatusMeta):
+    
+    def __new__(cls, class_name: str, bases: tuple[type, ...],
+            namespace: dict[str, Any], **kwargs: Any) -> type:
+        namespace["__inputs"] = cls.__get_fields(class_name, namespace, Input)
+        namespace["__outputs"] = cls.__get_fields(class_name, namespace, Output)
+        return super().__new__(cls, class_name, bases, namespace, **kwargs)
+
+    @staticmethod
+    def __get_fields(class_name: str, namespace: dict[str, Any],
+            required_type: type) -> list[tuple[str, str, type]]:
+        if "__annotations__" not in namespace:
+            return list()
+        fields = list[tuple[str, str, type]]()
+        private_prefix = f"_{class_name}__"
+        for field_name, field_type in namespace["__annotations__"].items():
+            if get_origin(field_type) is not required_type:
+                continue
+            if field_name.startswith(private_prefix):
+                slot_name = field_name[len(private_prefix):]
+            elif field_name.startswith("_"):
+                slot_name = field_name[1:]
+            else:
+                slot_name = field_name
+            field_args = get_args(field_type)
+            assert(len(field_args) == 1)
+            data_type = field_args[0]
+            fields.append((slot_name, field_name, data_type))
+        return fields
+
+
+# Procedure that automatically detects input and output slots from fields
+# and performs calculations using custom algorithm
+class Calculator(Procedure, metaclass=CalculatorMeta):
+
+    __input_fields: dict[str, str]
+    __output_fields: dict[str, str]
+
+    # CONSTRUCTOR
+    def __init__(self) -> None:
+        super().__init__()
+        self.__input_fields = dict()
+        self.__output_fields = dict()
+        for slot_name, field_name, data_type in getattr(self, "__inputs"):
+            setattr(self, field_name, Slot(data_type))
+            self.__input_fields[slot_name] = field_name
+        for slot_name, field_name, data_type in getattr(self, "__outputs"):
+            setattr(self, field_name, Slot(data_type))
+            self.__output_fields[slot_name] = field_name
+    
+    
+    # COMMANDS
+
+    # Run calculations
+    # PRE: all inputs have data
+    # PRE: input data lead to successfull calculation
+    # POST: all outputs have data
+    @status("OK", "INVALID_INPUT", "INTERNAL_ERROR")
+    def run(self) -> None:
+        for field_name in self.__input_fields.values():
+            slot: Slot = getattr(self, field_name)
+            if slot.get_state() == Slot.State.NONE:
+                self._set_status("run", "INVALID_INPUT")
+                return
+        self.calculate()
+        if not self.is_status("calculate", "OK"):
+            self._set_status("run", "INTERNAL_ERROR")
+            return
+        for field_name in self.__output_fields.values():
+            slot: Slot = getattr(self, field_name)
+            if slot.get_state() == Slot.State.NONE:
+                self._set_status("run", "INTERNAL_ERROR")
+                return
+        self._set_status("run", "OK")
+
+    # Run calculations
+    # PRE: input data lead to successfull calculation
+    # POST: all outputs have data
+    @abstractmethod
+    @status("OK", "ERROR")
+    def calculate(self) -> None:
+        assert False
+
+
+    # QUERIES
+
+    # Get IDs of input slots
+    def get_input_ids(self) -> set[str]:
+        return set(self.__input_fields.keys())
+
+    # Get IDs of output slots
+    def get_output_ids(self) -> set[str]:
+        return set(self.__output_fields.keys())
+
+    # Get input slot
+    # PRE: `id` is valid input slot ID
+    @status("OK", "INVALID_ID")
+    def get_input(self, id: str) -> DataDest:
+        if id not in self.__input_fields:
+            self._set_status("get_input", "INVALID_ID")
+            return Slot(object)
+        self._set_status("get_input", "OK")
+        return getattr(self, self.__input_fields[id])
+
+    # Get output slot
+    # PRE: `id` is valid output slot ID
+    @status("OK", "INVALID_ID")
+    def get_output(self, id: str) -> DataSource:
+        if id not in self.__output_fields:
+            self._set_status("get_output", "INVALID_ID")
+            return Slot(object)
+        self._set_status("get_output", "OK")
+        return getattr(self, self.__output_fields[id])
 
 
 def _type_fits(t: type, required: type) -> bool:
