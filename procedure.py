@@ -1,9 +1,13 @@
-from typing import TypeVar, Type, Any, Generic, get_origin, get_args
+from typing import TypeVar, Type, Any, Generic, Callable, get_origin, get_args
 from abc import abstractmethod
+from inspect import getfullargspec
+
 from tools import Status, status, StatusMeta
 
 
 T = TypeVar("T")
+AnyFunc = Callable[..., T]
+
 
 # Interface for data input
 # Generic argument is used in `Calculator`
@@ -294,6 +298,144 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
             return Slot(object)
         self._set_status("get_output", "OK")
         return getattr(self, self.__output_fields[id])
+    
+
+# Procedure that holds a composition of linked procedures
+# and make them run using lazy dataflow
+class Block(Procedure):
+
+    # COMMANDS
+
+    # Run calculations
+    # PRE: all inputs have data
+    # PRE: input data lead to successfull calculation
+    # POST: all outputs have data
+    @status("OK", "INVALID_INPUT", "INTERNAL_ERROR")
+    def run(self) -> None:
+        assert False
+
+
+    # QUERIES
+
+    # Get IDs of input slots
+    def get_input_ids(self) -> set[str]:
+        assert False
+
+    # Get IDs of output slots
+    def get_output_ids(self) -> set[str]:
+        assert False
+
+    # Get input slot
+    # PRE: `id` is valid input slot ID
+    @status("OK", "INVALID_ID")
+    def get_input(self, id: str) -> DataDest:
+        assert False
+
+    # Get output slot
+    # PRE: `id` is valid output slot ID
+    @status("OK", "INVALID_ID")
+    def get_output(self, id: str) -> DataSource:
+        assert False
+
+
+# Procedure that wraps a function giving names to the returned tuple elements
+class Wrapper(Procedure):
+
+    __func: AnyFunc[Any]
+    __input_ids: list[str]
+    __output_ids: list[str]
+    __inputs: dict[str, Slot]
+    __outputs: dict[str, Slot]
+
+    
+    # CONSTRUCTOR
+    def __init__(self, func: AnyFunc[T], output_ids: list[str]) -> None:
+        super().__init__()
+        self.__func = func
+        arg_spec = getfullargspec(func)
+        self.__input_ids = arg_spec.args
+        self.__output_ids = output_ids
+        self.__inputs = dict()
+        self.__outputs = dict()
+        for id in self.__input_ids:
+            self.__inputs[id] = Slot(arg_spec.annotations[id])
+        if "return" not in arg_spec.annotations:
+            assert len(output_ids) == 0
+            return
+        return_type = arg_spec.annotations["return"]
+        if get_origin(return_type) is not tuple:
+            assert len(output_ids) == 1
+            self.__outputs[output_ids[0]] = Slot(return_type)
+            return
+        output_types = get_args(return_type)
+        for i in range(len(self.__output_ids)):
+            id = self.__output_ids[i]
+            data_type = output_types[i]
+            self.__outputs[id] = Slot(data_type)
+    
+    
+    # COMMANDS
+
+    # Run calculations
+    # PRE: all inputs have data
+    # PRE: input data lead to successfull calculation
+    # POST: all outputs have data
+    @status("OK", "INVALID_INPUT", "INTERNAL_ERROR")
+    def run(self) -> None:
+        args = list[Any]()
+        for id in self.__input_ids:
+            input = self.__inputs[id]
+            if not input.has_data():
+                self._set_status("run", "INVALID_INPUT")
+                return
+            args.append(input.get())
+        try:
+            result = self.__func(*args)
+        except:
+            self._set_status("run", "INTERNAL_ERROR")
+            return
+        if len(self.__output_ids) == 1:
+            result = tuple(result,)
+        for i in range(len(self.__output_ids)):
+            value = result[i]
+            id = self.__output_ids[i]
+            output = self.__outputs[id]
+            if not _type_fits(type(value), output.get_type()):
+                self._set_status("run", "INTERNAL_ERROR")
+                return
+            output.set(value)
+        self._set_status("run", "OK")        
+
+
+    # QUERIES
+
+    # Get IDs of input slots
+    def get_input_ids(self) -> set[str]:
+        return set(self.__input_ids)
+
+    # Get IDs of output slots
+    def get_output_ids(self) -> set[str]:
+        return set(self.__output_ids)
+
+    # Get input slot
+    # PRE: `id` is valid input slot ID
+    @status("OK", "INVALID_ID")
+    def get_input(self, id: str) -> DataDest:
+        if id not in self.__inputs:
+            self._set_status("get_input", "INVALID_ID")
+            return Slot(object)
+        self._set_status("get_input", "OK")
+        return self.__inputs[id]
+
+    # Get output slot
+    # PRE: `id` is valid output slot ID
+    @status("OK", "INVALID_ID")
+    def get_output(self, id: str) -> DataSource:
+        if id not in self.__outputs:
+            self._set_status("get_output", "INVALID_ID")
+            return Slot(object)
+        self._set_status("get_output", "OK")
+        return self.__outputs[id]
 
 
 def _type_fits(t: type, required: type) -> bool:

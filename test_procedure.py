@@ -1,6 +1,6 @@
 import unittest
 
-from procedure import Slot, Calculator, Input, Output
+from procedure import Slot, Calculator, Input, Output, Wrapper
 from tools import status
 
 
@@ -141,6 +141,78 @@ class Test_Calculator(unittest.TestCase):
         dm.fail = "error"
         dm.run()
         self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
+
+
+
+class Test_procedure(unittest.TestCase):
+
+    @staticmethod
+    def func(a: int, b: str) -> tuple[int, str]:
+        if b == "fail":
+            raise ValueError()
+        return 2, "boo"
+
+    def test_init(self):
+        w = Wrapper(self.func, ["c", "d"])
+        self.assertEqual(w.get_input_ids(), {"a", "b"})
+        self.assertEqual(w.get_output_ids(), {"c", "d"})
+
+    def test_get_input(self):
+        w = Wrapper(self.func, ["c", "d"])
+        self.assertTrue(w.is_status("get_input", "NIL"))
+        w.get_input("foo")
+        self.assertTrue(w.is_status("get_input", "INVALID_ID"))
+        w.get_input("c")
+        self.assertTrue(w.is_status("get_input", "INVALID_ID"))
+        w.get_input("d")
+        self.assertTrue(w.is_status("get_input", "INVALID_ID"))
+        a = w.get_input("a")
+        self.assertTrue(w.is_status("get_input", "OK"))
+        self.assertIsInstance(a, Slot)
+        self.assertIs(a.get_type(), int)
+        b = w.get_input("b")
+        self.assertTrue(w.is_status("get_input", "OK"))
+        self.assertIsInstance(b, Slot)
+        self.assertIs(b.get_type(), str)
+
+    def test_get_output(self):
+        w = Wrapper(self.func, ["c", "d"])
+        self.assertTrue(w.is_status("get_output", "NIL"))
+        w.get_output("foo")
+        self.assertTrue(w.is_status("get_output", "INVALID_ID"))
+        w.get_output("a")
+        self.assertTrue(w.is_status("get_output", "INVALID_ID"))
+        w.get_output("b")
+        self.assertTrue(w.is_status("get_output", "INVALID_ID"))
+        c = w.get_output("c")
+        self.assertTrue(w.is_status("get_output", "OK"))
+        self.assertIsInstance(c, Slot)
+        self.assertIs(c.get_type(), int)
+        d = w.get_output("d")
+        self.assertTrue(w.is_status("get_output", "OK"))
+        self.assertIsInstance(d, Slot)
+        self.assertIs(d.get_type(), str)
+
+    def test_run(self):
+        w = Wrapper(self.func, ["c", "d"])
+        a = w.get_input("a")
+        b = w.get_input("b")
+        c = w.get_output("c")
+        d = w.get_output("d")
+        self.assertTrue(w.is_status("run", "NIL"))
+        w.run()
+        self.assertTrue(w.is_status("run", "INVALID_INPUT"))
+        a.set(1)
+        w.run()
+        self.assertTrue(w.is_status("run", "INVALID_INPUT"))
+        b.set("fail")
+        w.run()
+        self.assertTrue(w.is_status("run", "INTERNAL_ERROR"))
+        b.set("foo")
+        w.run()
+        self.assertTrue(w.is_status("run", "OK"))
+        self.assertEqual(c.get(), 2)
+        self.assertEqual(d.get(), "boo")
 
 
 if __name__ == "__main__":
