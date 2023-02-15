@@ -9,15 +9,15 @@ class Test_Slot(unittest.TestCase):
     def test_init(self):
         s = Slot(int)
         self.assertIs(s.get_type(), int)
-        self.assertEqual(s.get_state(), Slot.State.NONE)
+        self.assertFalse(s.has_data())
 
     def test_set(self):
         s = Slot(complex)
         self.assertTrue(s.is_status("set", "NIL"))
-        self.assertEqual(s.get_state(), Slot.State.NONE)
+        self.assertFalse(s.has_data())
         s.set(1)
         self.assertTrue(s.is_status("set", "OK"))
-        self.assertEqual(s.get_state(), Slot.State.NEW)
+        self.assertTrue(s.has_data())
         s.set(1.1)
         self.assertTrue(s.is_status("set", "OK"))
         s.set(1 + 2j)
@@ -25,14 +25,13 @@ class Test_Slot(unittest.TestCase):
         s.set("foo")
         self.assertTrue(s.is_status("set", "INVALID_TYPE"))
 
-    def test_mark_used(self):
-        s = Slot(int)
-        self.assertTrue(s.is_status("mark_used", "NIL"))
-        s.mark_used()
-        self.assertTrue(s.is_status("mark_used", "NO_DATA"))
+    def test_clear(self):
+        s = Slot(complex)
+        self.assertFalse(s.has_data())
         s.set(1)
-        s.mark_used()
-        self.assertTrue(s.is_status("mark_used", "OK"))
+        self.assertTrue(s.has_data())
+        s.clear()
+        self.assertFalse(s.has_data())
 
     def test_get(self):
         s = Slot(int)

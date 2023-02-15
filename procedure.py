@@ -1,6 +1,5 @@
 from typing import TypeVar, Type, Any, Generic, get_origin, get_args
 from abc import abstractmethod
-from enum import Enum, auto
 from tools import Status, status, StatusMeta
 
 
@@ -11,23 +10,8 @@ T = TypeVar("T")
 # CONTAINS:
 #   - data
 #   - data type
-#   - data state (no data, new data, used data)
+#   - data state (has data or not)
 class Input(Generic[T], Status):
-
-    class State(Enum):
-        NONE = auto(),
-        NEW = auto(),
-        USED = auto(),
-
-    # COMMANDS
-
-    # Mark data as used
-    # PRE: data state is not `NONE`
-    @abstractmethod
-    @status("OK", "NO_DATA")
-    def mark_used(self) -> None:
-        assert False
-    
     
     # QUERIES
 
@@ -38,11 +22,11 @@ class Input(Generic[T], Status):
 
     # Get data state
     @abstractmethod
-    def get_state(self) -> State:
+    def has_data(self) -> bool:
         assert False
 
     # Get data
-    # PRE: data state is not `NONE`
+    # PRE: has data
     @abstractmethod
     @status("OK", "NO_DATA")
     def get(self) -> T:
@@ -54,17 +38,25 @@ class Input(Generic[T], Status):
 # CONTAINS:
 #   - data
 #   - data type
+#   - data state (has data or not)
 class Output(Generic[T], Status):
 
     # COMMANDS
 
     # Set data
     # PRE: `value` type fits data type
+    # POST: data is `value`
     @abstractmethod
     @status("OK", "INVALID_TYPE")
     def set(self, value: T) -> None:
         assert False
-    
+
+    # Delete data
+    # POST: no data
+    @abstractmethod
+    def clear(self) -> None:
+        assert False
+
     
     # QUERIES
     
@@ -82,45 +74,41 @@ DataDest = Output[Any]
 # CONTAINS:
 #   - data
 #   - data type
-#   - data state (no data, new data, used data)
+#   - data state (has data or not)
 class Slot(DataSource, DataDest):
     
     __type: type
     __value: Any
-    __state: Input.State
+    __has_data: bool
     
     
     # CONSTRUCTOR
     # POST: data type is `data_type`
-    # POST: state is `NONE`
+    # POST: no data
     def __init__(self, data_type: type) -> None:
         super().__init__()
         self.__type = data_type
-        self.__state = self.State.NONE
+        self.__has_data = False
 
     
     # COMMANDS
 
     # Set data
     # PRE: `value` type fits data type
+    # POST: data is `value`
     @status("OK", "INVALID_TYPE")
     def set(self, value: Any) -> None:
         if not _type_fits(type(value), self.__type):
             self._set_status("set", "INVALID_TYPE")
             return
         self._set_status("set", "OK")
-        self.__state = self.State.NEW
+        self.__has_data = True
         self.__value = value
 
-    # Mark data as used
-    # PRE: data state is not `NONE`
-    @status("OK", "NO_DATA")
-    def mark_used(self) -> None:
-        if self.__state == Input.State.NONE:
-            self._set_status("mark_used", "NO_DATA")
-            return
-        self.__state = self.State.USED
-        self._set_status("mark_used", "OK")
+    # Delete data
+    # POST: no data
+    def clear(self) -> None:
+        self.__has_data = False
     
     
     # QUERIES
@@ -130,14 +118,14 @@ class Slot(DataSource, DataDest):
         return self.__type
 
     # Get data state
-    def get_state(self) -> Input.State:
-        return self.__state
+    def has_data(self) -> bool:
+        return self.__has_data
 
     # Get data
-    # PRE: data state is not `NONE`
+    # PRE: has data
     @status("OK", "NO_DATA")
     def get(self) -> Any:
-        if self.__state == Input.State.NONE:
+        if not self.__has_data:
             self._set_status("get", "NO_DATA")
             return None
         self._set_status("get", "OK")
@@ -253,7 +241,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
     def run(self) -> None:
         for field_name in self.__input_fields.values():
             slot: Slot = getattr(self, field_name)
-            if slot.get_state() == Slot.State.NONE:
+            if not slot.has_data():
                 self._set_status("run", "INVALID_INPUT")
                 return
         self.calculate()
@@ -262,7 +250,7 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
             return
         for field_name in self.__output_fields.values():
             slot: Slot = getattr(self, field_name)
-            if slot.get_state() == Slot.State.NONE:
+            if not slot.has_data():
                 self._set_status("run", "INTERNAL_ERROR")
                 return
         self._set_status("run", "OK")
