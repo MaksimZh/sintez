@@ -52,22 +52,19 @@ class Test_Calculator(unittest.TestCase):
         __c: Output[int]
         __d: Output[str]
 
-        fail: str
-
         def __init__(self) -> None:
             super().__init__()
-            self.fail = ""
 
         @status()
         def calculate(self) -> None:
-            if self.fail == "exit":
+            if self.__b.get() == "exit":
                 return
-            if self.fail == "no output":
+            if self.__b.get() == "no output":
                 self._set_status("calculate", "OK")
                 return
             self.__c.set(2)
             self.__d.set("boo")
-            if self.fail == "error":
+            if self.__b.get() == "error":
                 self._set_status("calculate", "ERROR")
                 return
             self._set_status("calculate", "OK")
@@ -126,29 +123,28 @@ class Test_Calculator(unittest.TestCase):
         a.set(1)
         dm.run()
         self.assertTrue(dm.is_status("run", "INVALID_INPUT"))
+        b.set("exit")
+        dm.run()
+        self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
+        b.set("no output")
+        dm.run()
+        self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
         b.set("foo")
-        dm.fail = "exit"
-        dm.run()
-        self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
-        dm.fail = "no output"
-        dm.run()
-        self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
-        dm.fail = ""
         dm.run()
         self.assertTrue(dm.is_status("run", "OK"))
         self.assertEqual(c.get(), 2)
         self.assertEqual(d.get(), "boo")
-        dm.fail = "error"
+        b.set("error")
         dm.run()
         self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
 
 
 
-class Test_procedure(unittest.TestCase):
+class Test_Wrapper(unittest.TestCase):
 
     @staticmethod
     def func(a: int, b: str) -> tuple[int, str]:
-        if b == "fail":
+        if b == "error":
             raise ValueError()
         return 2, "boo"
 
@@ -205,7 +201,7 @@ class Test_procedure(unittest.TestCase):
         a.set(1)
         w.run()
         self.assertTrue(w.is_status("run", "INVALID_INPUT"))
-        b.set("fail")
+        b.set("error")
         w.run()
         self.assertTrue(w.is_status("run", "INTERNAL_ERROR"))
         b.set("foo")
