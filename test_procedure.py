@@ -1,6 +1,6 @@
 import unittest
 
-from procedure import Slot, Calculator, Input, Output, Wrapper
+from procedure import Slot, Calculator, Input, Output, Wrapper, Block
 from tools import status
 
 
@@ -139,7 +139,6 @@ class Test_Calculator(unittest.TestCase):
         self.assertTrue(dm.is_status("run", "INTERNAL_ERROR"))
 
 
-
 class Test_Wrapper(unittest.TestCase):
 
     @staticmethod
@@ -209,6 +208,24 @@ class Test_Wrapper(unittest.TestCase):
         self.assertTrue(w.is_status("run", "OK"))
         self.assertEqual(c.get(), 2)
         self.assertEqual(d.get(), "boo")
+
+
+class Test_Block(unittest.TestCase):
+
+    @staticmethod
+    def func(a: int, b: str) -> tuple[int, str]:
+        if b == "error":
+            raise ValueError()
+        return a + 1, b + "b"
+
+    def test_single(self):
+        p = Block([(
+            Wrapper(self.func, ["c", "d"]),
+            {"a": "aa", "b": "bb"},
+            {"c": "cc", "d": "dd"},
+        )])
+        self.assertEqual(p.get_input_ids(), {"aa", "bb"})
+        self.assertEqual(p.get_output_ids(), {"cc", "dd"})
 
 
 if __name__ == "__main__":

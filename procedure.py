@@ -298,44 +298,6 @@ class Calculator(Procedure, metaclass=CalculatorMeta):
             return Slot(object)
         self._set_status("get_output", "OK")
         return getattr(self, self.__output_fields[id])
-    
-
-# Procedure that holds a composition of linked procedures
-# and make them run using lazy dataflow
-class Block(Procedure):
-
-    # COMMANDS
-
-    # Run calculations
-    # PRE: all inputs have data
-    # PRE: input data lead to successfull calculation
-    # POST: all outputs have data
-    @status("OK", "INVALID_INPUT", "INTERNAL_ERROR")
-    def run(self) -> None:
-        assert False
-
-
-    # QUERIES
-
-    # Get IDs of input slots
-    def get_input_ids(self) -> set[str]:
-        assert False
-
-    # Get IDs of output slots
-    def get_output_ids(self) -> set[str]:
-        assert False
-
-    # Get input slot
-    # PRE: `id` is valid input slot ID
-    @status("OK", "INVALID_ID")
-    def get_input(self, id: str) -> DataDest:
-        assert False
-
-    # Get output slot
-    # PRE: `id` is valid output slot ID
-    @status("OK", "INVALID_ID")
-    def get_output(self, id: str) -> DataSource:
-        assert False
 
 
 # Procedure that wraps a function giving names to the returned tuple elements
@@ -436,6 +398,52 @@ class Wrapper(Procedure):
             return Slot(object)
         self._set_status("get_output", "OK")
         return self.__outputs[id]
+
+
+# Procedure that holds a composition of linked procedures
+# and make them run using lazy dataflow
+class Block(Procedure):
+
+    __inputs: dict[str, Slot]
+    __outputs: dict[str, Slot]
+
+    # CONSTRUCTOR
+    def __init__(self, pattern: list[Any]) -> None:
+        super().__init__()
+
+    
+    # COMMANDS
+
+    # Run calculations
+    # PRE: all inputs have data
+    # PRE: input data lead to successfull calculation
+    # POST: all outputs have data
+    @status("OK", "INVALID_INPUT", "INTERNAL_ERROR")
+    def run(self) -> None:
+        assert False
+
+
+    # QUERIES
+
+    # Get IDs of input slots
+    def get_input_ids(self) -> set[str]:
+        assert False
+
+    # Get IDs of output slots
+    def get_output_ids(self) -> set[str]:
+        assert False
+
+    # Get input slot
+    # PRE: `id` is valid input slot ID
+    @status("OK", "INVALID_ID")
+    def get_input(self, id: str) -> DataDest:
+        assert False
+
+    # Get output slot
+    # PRE: `id` is valid output slot ID
+    @status("OK", "INVALID_ID")
+    def get_output(self, id: str) -> DataSource:
+        assert False
 
 
 def _type_fits(t: type, required: type) -> bool:
