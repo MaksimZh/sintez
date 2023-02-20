@@ -57,8 +57,9 @@ class Solver(Status):
     
     # Get input or output value
     # PRE: `id` is valid input or output name
+    # PRE: there is value at `id`
     @abstractmethod
-    @status("OK", "INVALID_ID")
+    @status("OK", "INVALID_ID", "NO_VALUE")
     def get(self, id: str) -> Any:
         assert False
 
@@ -166,13 +167,40 @@ class WrapperSolver(Solver):
     # PRE: `id` is valid input or output name
     @status("OK", "INVALID_ID")
     def has_value(self, id: str) -> bool:
-        assert False
-    
+        if id in self.__spec.get_input_ids():
+            self._set_status("has_value", "OK")
+            return id in self.__inputs
+        if id in self.__spec.get_output_ids():
+            self._set_status("has_value", "OK")
+            return id in self.__outputs
+        self._set_status("has_value", "INVALID_ID")
+        return False
+
     # Get input or output value
     # PRE: `id` is valid input or output name
-    @status("OK", "INVALID_ID")
+    # PRE: there is value at `id`
+    @status("OK", "INVALID_ID", "NO_VALUE")
     def get(self, id: str) -> Any:
-        assert False
+        if id in self.__spec.get_input_ids():
+            return self.__get_input(id)
+        if id in self.__spec.get_output_ids():
+            return self.__get_output(id)
+        self._set_status("get", "INVALID_ID")
+        return None
+
+    def __get_input(self, id: str) -> Any:
+        if id not in self.__inputs:
+            self._set_status("get", "NO_VALUE")
+            return None
+        self._set_status("get", "OK")
+        return self.__inputs[id]
+
+    def __get_output(self, id: str) -> Any:
+        if id not in self.__outputs:
+            self._set_status("get", "NO_VALUE")
+            return None
+        self._set_status("get", "OK")
+        return self.__outputs[id]
 
 
 # Factory for solver wrapping function
