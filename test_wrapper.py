@@ -3,26 +3,26 @@ import unittest
 from solver import Wrapper
 
 
-class Test_Wrapper(unittest.TestCase):
+def func(a: int, b: str) -> tuple[int, str]:
+    if b == "error":
+        raise ValueError()
+    return a * 2, b + b
 
-    @staticmethod
-    def func(a: int, b: str) -> tuple[int, str]:
-        if b == "error":
-            raise ValueError()
-        return a * 2, b + b
+
+class Test_Wrapper(unittest.TestCase):
     
     def test_spec(self):
-        W = Wrapper(self.func, ["c", "d"])
+        W = Wrapper(func, ["c", "d"])
         self.assertEqual(W.get_input_spec(), {"a": int, "b": str})
         self.assertEqual(W.get_output_spec(), {"c": int, "d": str})
 
     def test_create(self):
-        w = Wrapper(self.func, ["c", "d"]).create()
+        w = Wrapper(func, ["c", "d"]).create()
         self.assertEqual(w.get_input_spec(), {"a": int, "b": str})
         self.assertEqual(w.get_output_spec(), {"c": int, "d": str})
 
     def test_put(self):
-        w = Wrapper(self.func, ["c", "d"]).create()
+        w = Wrapper(func, ["c", "d"]).create()
         self.assertTrue(w.is_status("put", "NIL"))
         w.put("foo", 5)
         self.assertTrue(w.is_status("put", "INVALID_ID"))
@@ -36,7 +36,7 @@ class Test_Wrapper(unittest.TestCase):
         self.assertTrue(w.is_status("put", "OK"))
 
     def test_run(self):
-        w = Wrapper(self.func, ["c", "d"]).create()
+        w = Wrapper(func, ["c", "d"]).create()
         self.assertTrue(w.is_status("run", "NIL"))
         w.run()
         self.assertTrue(w.is_status("run", "INVALID_INPUT"))
@@ -51,7 +51,7 @@ class Test_Wrapper(unittest.TestCase):
         self.assertTrue(w.is_status("run", "OK"))
 
     def test_has_value(self):
-        w = Wrapper(self.func, ["c", "d"]).create()
+        w = Wrapper(func, ["c", "d"]).create()
         self.assertTrue(w.is_status("has_value", "NIL"))
         w.has_value("foo")
         self.assertTrue(w.is_status("has_value", "INVALID_ID"))
@@ -92,7 +92,7 @@ class Test_Wrapper(unittest.TestCase):
         self.assertTrue(w.is_status("has_value", "OK"))
 
     def test_get(self):
-        w = Wrapper(self.func, ["c", "d"]).create()
+        w = Wrapper(func, ["c", "d"]).create()
         self.assertTrue(w.is_status("get", "NIL"))
         w.get("foo")
         self.assertTrue(w.is_status("get", "INVALID_ID"))
